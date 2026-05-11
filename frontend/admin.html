@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="robots" content="noindex, nofollow">
+    <title>ExploreArmenia | База мест</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 p-8">
+    <div class="max-w-6xl mx-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-bold">Управление достопримечательностями</h2>
+            <a href="index.html" class="text-cyan-600 underline">← К генератору</a>
+        </div>
+
+        <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+            <h3 class="font-bold mb-4">Добавить новое место</h3>
+            <div class="grid grid-cols-3 gap-4 mb-4">
+                <input type="text" id="p_name" placeholder="Название (Хор Вирап)" class="p-2 border rounded">
+                <input type="text" id="p_slug" placeholder="Slug (khor-virap)" class="p-2 border rounded">
+                <select id="p_cat" class="p-2 border rounded">
+                    <option value="monastery">Монастырь</option>
+                    <option value="winery">Винодельня</option>
+                    <option value="nature">Природа</option>
+                </select>
+            </div>
+            <textarea id="p_promo" rows="3" class="w-full p-2 border rounded mb-4"
+                placeholder="Маркетинговое описание для ворда..."></textarea>
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <input type="text" id="p_img1" placeholder="URL Фото 1 (Cloudflare R2)" class="p-2 border rounded">
+                <input type="text" id="p_img2" placeholder="URL Фото 2" class="p-2 border rounded">
+            </div>
+            <button onclick="savePlace()" class="bg-green-600 text-white px-6 py-2 rounded font-bold">Сохранить в
+                базу</button>
+        </div>
+
+        <div id="places_list" class="grid grid-cols-1 gap-2">
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+
+</html>

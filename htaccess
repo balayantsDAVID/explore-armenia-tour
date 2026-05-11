@@ -1,0 +1,11 @@
+# Выключаем просмотр содержимого папок
+Options -Indexes
+
+# Запрет индексации для всех поисковиков через заголовки
+Header set X-Robots-Tag "noindex, nofollow, noarchive, nosnippet"
+
+# Блокировка доступа к конфигурационным файлам
+<FilesMatch "(\.(bak|config|sql|php|log)|schema)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
