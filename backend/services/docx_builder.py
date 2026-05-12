@@ -1,48 +1,67 @@
-from docx import Document
-from docx.shared import Inches, Pt, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml.shared import qn
+# ============================================================
+# ExploreArmenia — Python обёртка для запуска docx_builder.js
+# ============================================================
+# Python (FastAPI) не умеет напрямую работать с библиотекой docx.
+# Поэтому мы: 
+#   1. Сохраняем данные в JSON файл
+#   2. Запускаем Node.js скрипт через subprocess
+#   3. Node.js читает JSON и создаёт DOCX
+# ============================================================
 
-class DocxBuilder:
-    def __init__(self, template_path):
-        self.doc = Document(template_path)
-        self.blue_color = RGBColor(0, 170, 204)  # Твой #00AACC
-        self.red_color = RGBColor(204, 0, 0)     # Твой #CC0000
+import os
+import json
+import subprocess
 
-    def add_tour_day(self, day_number, date_str, title, places_data):
-        """
-        Добавляет блок дня: 2 колонки (Фото | Текст)
-        """
-        # Заголовок дня
-        p = self.doc.add_paragraph()
-        run = p.add_run(f"День {day_number} ({date_str})")
-        run.bold = True
-        run.font.size = Pt(14)
-        run.font.color.rgb = self.blue_color
+# Путь к Node.js скрипту (рядом с этим файлом)
+DOCX_BUILDER_JS = os.path.join(os.path.dirname(__file__), 'docx_builder.js')
 
-        # Создаем таблицу 1 ряд, 2 колонки
-        table = self.doc.add_table(rows=1, cols=2)
-        table.autofit = False
-        col_photos = table.columns[0]
-        col_text = table.columns[1]
-        col_photos.width = Inches(2.2)
-        col_text.width = Inches(4.3)
 
-        cells = table.rows[0].cells
-
-        # Левая колонка: Фото (вставляем из URL или временных файлов)
-        # В идеале: скачиваем фото из R2 во временную папку
-        # cells[0].add_paragraph().add_run().add_picture(temp_img_path, width=Inches(2))
-
-        # Правая колонка: Текст
-        text_cell = cells[1]
-        title_p = text_cell.paragraphs[0]
-        title_p.add_run(title).bold = True
-        
-        for place in places_data:
-            p = text_cell.add_paragraph(style='List Bullet')
-            p.add_run(f"{place['name']}: ").bold = True
-            p.add_run(place['description'])
-
-    def save(self, output_path):
-        self.doc.save(output_path)
+def build_docx(days: list, meta: dict, lang: str, output_path: str):
+    """
+    Создаёт DOCX файл из данных тура.
+    
+    Args:
+        days: список дней с местами и текстами (из ai_generator)
+        meta: данные тура (даты, рейсы, отель, контакт)
+        lang: язык документа (ru, en, hy)
+        output_path: путь куда сохранить .docx файл
+    """
+    
+    # Шаг 1: Сохраняем все данные в JSON файл
+    # (рядом с будущим docx файлом, в той же временной папке)
+    input_json_path = output_path.replace('.docx', '_input.json')
+    
+    payload = {
+        "days": days,
+        "meta": meta,
+        "lang": lang
+    }
+    
+    with open(input_json_path, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    
+    # Шаг 2: Запускаем Node.js
+    # node docx_builder.js /tmp/input.json /tmp/output.docx
+    result = subprocess.run(
+        ["node", DOCX_BUILDER_JS, input_json_path, output_path],
+        capture_output=True,
+        text=True,
+        timeout=60  # максимум 60 секунд
+    )
+    
+    # Шаг 3: Проверяем что всё прошло хорошо
+    if result.returncode != 0:
+        error_msg = result.stderr or result.stdout or "Unknown error"
+        raise RuntimeError(f"DOCX generation failed: {error_msg}")
+    
+    if not os.path.exists(output_path):
+        raise RuntimeError(f"DOCX file was not created at {output_path}")
+    
+    # Чистим временный JSON
+    try:
+        os.remove(input_json_path)
+    except:
+        pass
+    
+    print(f"✅ DOCX готов: {output_path}")
+    return output_path

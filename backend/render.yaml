@@ -1,0 +1,47 @@
+# ============================================================
+# render.yaml — Конфигурация деплоя на Render.com
+# ============================================================
+# Этот файл говорит Render:
+# 1. Как установить зависимости (Python + Node.js + LibreOffice)
+# 2. Как запустить сервер
+# 3. Какие переменные окружения нужны
+#
+# Как использовать:
+# - Загрузи весь backend/ в GitHub репозиторий
+# - На render.com создай новый Web Service
+# - Подключи репозиторий — Render сам найдёт этот файл
+# ============================================================
+
+services:
+  - type: web
+    name: explore-armenia-api
+    env: python
+    
+    # Команды установки (выполняются один раз при деплое)
+    buildCommand: |
+      pip install -r requirements.txt
+      npm install
+      apt-get install -y libreoffice
+    
+    # Команда запуска сервера
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    
+    # Бесплатный план
+    plan: free
+    
+    # Переменные окружения (заполни на render.com в разделе Environment)
+    envVars:
+      - key: DB_HOST
+        sync: false       # значение вводится вручную на Render
+      - key: DB_PORT
+        value: "3306"
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: RENDER_URL
+        sync: false
