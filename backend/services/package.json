@@ -1,0 +1,15 @@
+{
+  "name": "explore-armenia-docx",
+  "version": "1.0.0",
+  "description": "DOCX builder for ExploreArmenia tour programs",
+  "main": "services/docx_builder.js",
+  "scripts": {
+    "test": "node services/docx_builder.js"
+  },
+  "dependencies": {
+    "docx": "^8.5.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
