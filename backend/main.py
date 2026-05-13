@@ -41,7 +41,7 @@ async def startup_check():
 
 def get_db_connection():
     import mysql.connector
-    connection = mysql.connector.connect(
+    return mysql.connector.connect(
         host=os.environ.get("DB_HOST"),
         port=int(os.environ.get("DB_PORT", 3306)),
         database=os.environ.get("DB_NAME"),
@@ -49,9 +49,12 @@ def get_db_connection():
         password=os.environ.get("DB_PASSWORD"),
         charset='utf8mb4',
         autocommit=True,
-        connection_timeout=10
+        connection_timeout=10,
+        # SSL — требуется для Бегета MySQL 8.0
+        ssl_disabled=False,
+        ssl_verify_cert=False,
+        ssl_verify_identity=False
     )
-    return connection
 
 
 class TourMeta(BaseModel):
