@@ -25,7 +25,7 @@ async def match_places_from_route(route_text: str, db_conn, lang: str = "ru") ->
             if place_id:
                 seen_ids.add(place_id)
             unique_places.append(place)
-        places_data = unique_placess
+        places_data = unique_places
         result.append({
             "day_number": day["day_number"],
             "day_label": day["day_label"],
