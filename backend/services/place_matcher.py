@@ -16,6 +16,16 @@ async def match_places_from_route(route_text: str, db_conn, lang: str = "ru") ->
         for place_name in places_names:
             db_place = find_place_in_db(place_name, db_conn, lang)
             places_data.append(db_place)
+        seen_ids = set()
+        unique_places = []
+        for place in places_data:
+            place_id = place.get('id')
+            if place_id and place_id in seen_ids:
+                continue  # пропускаем дубликат
+            if place_id:
+                seen_ids.add(place_id)
+            unique_places.append(place)
+        places_data = unique_placess
         result.append({
             "day_number": day["day_number"],
             "day_label": day["day_label"],
@@ -41,14 +51,23 @@ def parse_days_from_text(route_text: str) -> list:
 
 
 async def extract_places_with_gemini(day_text: str) -> list:
-    prompt = f"""Извлеки ВСЕ конкретные места, достопримечательности и активности из текста.
-"НЕ включай: прилет, вылет, трансфер, трансфер в ереван, трансфер в аэропорт, заселение, свободный день, возвращение, завтрак в отеле, ночевка."
-Верни ТОЛЬКО JSON массив строк без объяснений.
+    prompt = f"""Ты — система обработки туристических маршрутов.
+Извлеки ТОЛЬКО конкретные туристические объекты: монастыри, храмы, музеи, природные объекты, винодельни, рестораны, города как достопримечательности.
 
-Текст: {day_text}
+СТРОГО НЕ ВКЛЮЧАЙ эти слова и фразы (даже если они есть в тексте):
+- прилет, вылет, перелет
+- трансфер, трансфер в ереван, трансфер в аэропорт
+- заселение, выселение
+- завтрак, обед, ужин, завтрак в отеле
+- возвращение, возвращение в ереван
+- свободный день, свободное время
+- ночевка, ночевка в отеле
+- посадка, высадка
 
-Ответ ТОЛЬКО в формате: ["место1", "место2"]
-Если мест нет — верни: []"""
+Текст дня: {day_text}
+
+Верни ТОЛЬКО JSON массив: ["место1", "место2"]
+Если туристических объектов нет — верни: []"""
     try:
         response = gemini_model.generate_content(prompt)
         text = re.sub(r'```json\s*|```\s*', '', response.text.strip()).strip()

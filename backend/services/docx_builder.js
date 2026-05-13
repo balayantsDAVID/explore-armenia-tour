@@ -63,22 +63,34 @@ const COL_TEXT  = Math.round(CONTENT_WIDTH * 0.65);   // 65% — текст
 // ============================================================
 async function downloadImage(url, destPath) {
   if (!url || url.trim() === '') return null;
-  
+
   return new Promise((resolve) => {
     const protocol = url.startsWith('https') ? https : http;
-    const file = fs.createWriteStream(destPath);
-    
-    protocol.get(url, (response) => {
+
+    const options = {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; ExploreArmenia/1.0)'
+      }
+    };
+
+    const req = protocol.get(url, options, (response) => {
+      // Обрабатываем редиректы
+      if (response.statusCode === 301 || response.statusCode === 302) {
+        downloadImage(response.headers.location, destPath).then(resolve);
+        return;
+      }
       if (response.statusCode !== 200) {
         resolve(null);
         return;
       }
+      const file = fs.createWriteStream(destPath);
       response.pipe(file);
       file.on('finish', () => { file.close(); resolve(destPath); });
-    }).on('error', () => resolve(null));
-    
-    // Таймаут 10 секунд
-    setTimeout(() => resolve(null), 10000);
+      file.on('error', () => resolve(null));
+    });
+
+    req.on('error', () => resolve(null));
+    req.setTimeout(10000, () => { req.destroy(); resolve(null); });
   });
 }
 
