@@ -61,9 +61,9 @@ def _make_pdf_reportlab(docx_path: str, pdf_path: str):
     # Читаем данные тура
     input_json = docx_path.replace('.docx', '_input.json')
     tour_data = None
-    if os.path.exists(input_json):
-        with open(input_json, 'r', encoding='utf-8') as f:
-            tour_data = json.load(f)
+    if not os.path.exists(input_json):
+        base = os.path.splitext(docx_path)[0]
+        input_json = f"{base}_input.json"
 
     w, h = A4
     c = canvas.Canvas(pdf_path, pagesize=A4)

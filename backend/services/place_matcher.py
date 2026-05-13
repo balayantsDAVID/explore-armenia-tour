@@ -12,6 +12,17 @@ async def match_places_from_route(route_text: str, db_conn, lang: str = "ru") ->
     result = []
     for day in days:
         places_names = await extract_places_with_gemini(day["raw_text"])
+        EXCLUDE_WORDS = {
+            'прилет', 'вылет', 'перелет', 'заселение', 'выселение',
+            'трансфер', 'трансфер в ереван', 'трансфер в аэропорт',
+            'возвращение', 'возвращение в ереван', 'свободный день',
+            'завтрак', 'обед', 'ужин', 'ночевка', 'посадка', 'высадка'
+        }
+        places_names = [
+            p for p in places_names
+            if p.lower().strip() not in EXCLUDE_WORDS
+            and not any(ex in p.lower() for ex in ['трансфер', 'прилет', 'вылет', 'заселен', 'выселен'])
+        ]
         places_data = []
         for place_name in places_names:
             db_place = find_place_in_db(place_name, db_conn, lang)

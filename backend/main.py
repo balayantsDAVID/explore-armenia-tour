@@ -127,7 +127,15 @@ async def generate_tour(request: GenerateRequest):
         output_dir = tempfile.mkdtemp()
         docx_path = os.path.join(output_dir, f"tour_{file_id}.docx")
         build_docx(enriched_days, request.meta.dict(), request.lang, docx_path)
-        pdf_path = os.path.join(output_dir, f"tour_{file_id}.pdf")
+        import json as json_module
+        pdf_data_path = os.path.join(output_dir, f"tour_{file_id}_input.json")
+        with open(pdf_data_path, 'w', encoding='utf-8') as f:
+            json_module.dump({
+                "days": enriched_days,
+                "meta": request.meta.dict(),
+                "lang": request.lang
+            }, f, ensure_ascii=False)
+        ppdf_path = os.path.join(output_dir, f"tour_{file_id}.pdf")
         convert_to_pdf(docx_path, pdf_path)
         try:
             cursor = conn.cursor()
