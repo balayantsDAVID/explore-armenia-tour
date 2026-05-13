@@ -97,10 +97,12 @@ def health_check():
 def health_db():
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM places")
-        count = cursor.fetchone()[0]
-        cursor.close()
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) as cnt FROM places")
+        row = cur.fetchone()
+        # PyMySQL с DictCursor возвращает словарь
+        count = row['cnt'] if isinstance(row, dict) else row[0]
+        cur.close()
         conn.close()
         return {"status": "ok", "places_count": count}
     except Exception as e:
