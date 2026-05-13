@@ -51,7 +51,6 @@ def get_db_connection():
         charset='utf8mb4',
         autocommit=True,
         connect_timeout=10,
-        ssl={'ssl': True},
         cursorclass=pymysql.cursors.DictCursor
     )
 
