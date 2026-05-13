@@ -1,10 +1,8 @@
-# Python зависимости для Render
-# Устанавливаются командой: pip install -r requirements.txt
-
-fastapi==0.111.0          # веб-фреймворк (наш сервер)
-uvicorn==0.29.0           # ASGI сервер (запускает FastAPI)
-mysql-connector-python==8.4.0  # подключение к MySQL на Бегете
-google-generativeai==0.7.2     # Gemini API (замена OpenAI, бесплатно)
-python-multipart==0.0.9        # загрузка файлов через форму
-reportlab==4.2.0               # PDF fallback (если нет LibreOffice)
-requests==2.32.0               # HTTP запросы (для скачивания фото)
+fastapi==0.111.0
+uvicorn==0.29.0
+PyMySQL==1.1.1
+cryptography==41.0.7
+google-generativeai==0.7.2
+python-multipart==0.0.9
+reportlab==4.2.0
+requests==2.32.3

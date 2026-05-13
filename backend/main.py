@@ -40,8 +40,9 @@ async def startup_check():
 
 
 def get_db_connection():
-    import mysql.connector
-    return mysql.connector.connect(
+    import pymysql
+    import pymysql.cursors
+    return pymysql.connect(
         host=os.environ.get("DB_HOST"),
         port=int(os.environ.get("DB_PORT", 3306)),
         database=os.environ.get("DB_NAME"),
@@ -49,11 +50,9 @@ def get_db_connection():
         password=os.environ.get("DB_PASSWORD"),
         charset='utf8mb4',
         autocommit=True,
-        connection_timeout=10,
-        # SSL — требуется для Бегета MySQL 8.0
-        ssl_disabled=False,
-        ssl_verify_cert=False,
-        ssl_verify_identity=False
+        connect_timeout=10,
+        ssl={'ssl': True},
+        cursorclass=pymysql.cursors.DictCursor
     )
 
 
@@ -172,7 +171,7 @@ def download_file(file_id: str, format: str):
 @app.get("/places")
 def get_places(search: Optional[str] = None, category: Optional[str] = None):
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor()
     query = "SELECT * FROM places WHERE is_active = TRUE"
     params = []
     if search:
