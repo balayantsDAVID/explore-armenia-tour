@@ -1,102 +1,74 @@
 # ============================================================
-# ExploreArmenia — Главный файл FastAPI сервера
-# ============================================================
-# Запускается командой: uvicorn main:app --host 0.0.0.0 --port $PORT
-# На Render это делается автоматически через Procfile
+# ExploreArmenia — Главный файл FastAPI сервера (исправленный)
 # ============================================================
 
 import os
 import uuid
 import tempfile
+import traceback
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional, List
-import mysql.connector
-from mysql.connector import Error
 
-# Импортируем наши сервисы (файлы из папки services/)
-from services.place_matcher import match_places_from_route
-from services.ai_generator import generate_day_texts
-from services.docx_builder import build_docx
-from services.pdf_builder import convert_to_pdf
+app = FastAPI(title="ExploreArmenia API", version="1.0.0")
 
-# ============================================================
-# Инициализация приложения
-# ============================================================
-
-app = FastAPI(
-    title="ExploreArmenia API",
-    description="Генератор программ туров по Армении",
-    version="1.0.0"
-)
-
-# CORS — разрешаем запросы с твоего домена на Бегете
-# Без этого браузер заблокирует запросы с Бегета к Render
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://tours.explorearmenia.am",   # твой поддомен на Бегете
-        "http://localhost:3000",              # локальная разработка
-        "http://127.0.0.1:5500",             # Live Server в VS Code
-        "*"                                  # временно разрешаем всё (уберём позже)
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ============================================================
-# Подключение к MySQL
-# ============================================================
+REQUIRED_ENV = ["DB_HOST", "DB_NAME", "DB_USER", "DB_PASSWORD", "GEMINI_API_KEY"]
+
+@app.on_event("startup")
+async def startup_check():
+    missing = [k for k in REQUIRED_ENV if not os.environ.get(k)]
+    if missing:
+        print(f"⚠️  ПРЕДУПРЕЖДЕНИЕ: Не установлены переменные: {missing}")
+    else:
+        print("✅ Все переменные окружения установлены")
+    try:
+        conn = get_db_connection()
+        conn.close()
+        print("✅ MySQL подключение успешно")
+    except Exception as e:
+        print(f"❌ MySQL ошибка: {e}")
+
 
 def get_db_connection():
-    """
-    Создаёт подключение к MySQL на Бегете.
-    Credentials берутся из переменных окружения (не из кода!).
-    """
-    try:
-        connection = mysql.connector.connect(
-            host=os.environ.get("DB_HOST"),
-            port=int(os.environ.get("DB_PORT", 3306)),
-            database=os.environ.get("DB_NAME"),
-            user=os.environ.get("DB_USER"),
-            password=os.environ.get("DB_PASSWORD"),
-            charset='utf8mb4',
-            # Автоматически переподключаться если соединение упало
-            autocommit=True
-        )
-        return connection
-    except Error as e:
-        print(f"Ошибка подключения к MySQL: {e}")
-        raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
+    import mysql.connector
+    connection = mysql.connector.connect(
+        host=os.environ.get("DB_HOST"),
+        port=int(os.environ.get("DB_PORT", 3306)),
+        database=os.environ.get("DB_NAME"),
+        user=os.environ.get("DB_USER"),
+        password=os.environ.get("DB_PASSWORD"),
+        charset='utf8mb4',
+        autocommit=True,
+        connection_timeout=10
+    )
+    return connection
 
-
-# ============================================================
-# Модели данных (Pydantic)
-# ============================================================
-# Pydantic — это валидация данных. Если фронт отправит
-# неправильные данные, FastAPI автоматически вернёт ошибку.
 
 class TourMeta(BaseModel):
-    """Данные тура (первая страница документа)"""
-    start: str                    # "07.05.2026"
-    end: str                      # "11.05.2026"
-    flight_in: str                # "SU 1860, прилет в 12:55"
-    flight_out: str               # "SU 1861, вылет в 19:45"
-    guests: str                   # "4 человека"
-    hotel: str                    # "Holiday INN Express"
-    contact: str                  # "Светлана Ходакова, +79655914681"
+    start: str
+    end: str
+    flight_in: str
+    flight_out: str
+    guests: str
+    hotel: str
+    contact: str
 
 class GenerateRequest(BaseModel):
-    """Запрос на генерацию документа"""
-    prompt: str                   # маршрут по дням (сырой текст)
-    lang: str = "ru"              # язык вывода: ru, en, hy
-    meta: TourMeta                # данные тура
+    prompt: str
+    lang: str = "ru"
+    meta: TourMeta
 
 class PlaceCreate(BaseModel):
-    """Данные для создания/редактирования места в БД"""
     name_ru: str
     name_en: Optional[str] = ""
     name_hy: Optional[str] = ""
@@ -109,94 +81,60 @@ class PlaceCreate(BaseModel):
     promo_en: Optional[str] = ""
     photo_main: Optional[str] = ""
     photo_secondary: Optional[str] = ""
-    aliases: Optional[List[str]] = []  # альтернативные названия
+    aliases: Optional[List[str]] = []
 
-
-# ============================================================
-# ЭНДПОИНТЫ
-# ============================================================
 
 @app.get("/health")
 def health_check():
-    """
-    Проверка что сервер работает.
-    Открой в браузере: https://твой-адрес.onrender.com/health
-    Должен вернуть: {"status": "ok"}
-    """
-    return {"status": "ok", "service": "ExploreArmenia API"}
-
+    return {
+        "status": "ok",
+        "service": "ExploreArmenia API",
+        "env_check": {k: "set" if os.environ.get(k) else "MISSING" for k in REQUIRED_ENV}
+    }
 
 @app.get("/health/db")
 def health_db():
-    """
-    Проверка подключения к MySQL.
-    Открой: https://твой-адрес.onrender.com/health/db
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM places")
-    count = cursor.fetchone()[0]
-    cursor.close()
-    conn.close()
-    return {"status": "ok", "places_count": count}
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM places")
+        count = cursor.fetchone()[0]
+        cursor.close()
+        conn.close()
+        return {"status": "ok", "places_count": count}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
 
 
 @app.post("/generate")
 async def generate_tour(request: GenerateRequest):
-    """
-    Главный эндпоинт — генерация тура.
-    
-    Что происходит внутри:
-    1. Парсим маршрут по дням
-    2. Для каждого дня ищем места в БД через Gemini
-    3. Gemini генерирует красивые тексты на нужном языке
-    4. Собираем DOCX по шаблону
-    5. Конвертируем в PDF
-    6. Возвращаем ссылки на скачивание
-    """
-    conn = get_db_connection()
-    
     try:
-        # Шаг 1: Ищем места из промта в базе данных
-        matched_days = await match_places_from_route(
-            route_text=request.prompt,
-            db_conn=conn,
-            lang=request.lang
-        )
-        
-        # Шаг 2: Генерируем тексты через Gemini
-        enriched_days = await generate_day_texts(
-            days=matched_days,
-            lang=request.lang
-        )
-        
-        # Шаг 3: Собираем DOCX
-        # Уникальное имя файла чтобы не перезаписывать чужие документы
+        from services.place_matcher import match_places_from_route
+        from services.ai_generator import generate_day_texts
+        from services.docx_builder import build_docx
+        from services.pdf_builder import convert_to_pdf
+    except ImportError as e:
+        raise HTTPException(status_code=500, detail=f"Import error: {str(e)}")
+
+    conn = get_db_connection()
+    try:
+        matched_days = await match_places_from_route(request.prompt, conn, request.lang)
+        enriched_days = await generate_day_texts(matched_days, request.lang)
         file_id = str(uuid.uuid4())[:8]
         output_dir = tempfile.mkdtemp()
         docx_path = os.path.join(output_dir, f"tour_{file_id}.docx")
-        
-        build_docx(
-            days=enriched_days,
-            meta=request.meta.dict(),
-            lang=request.lang,
-            output_path=docx_path
-        )
-        
-        # Шаг 4: Конвертируем в PDF
+        build_docx(enriched_days, request.meta.dict(), request.lang, docx_path)
         pdf_path = os.path.join(output_dir, f"tour_{file_id}.pdf")
         convert_to_pdf(docx_path, pdf_path)
-        
-        # Шаг 5: Сохраняем лог в БД
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO tour_logs (client_name, route_raw, docx_link)
-            VALUES (%s, %s, %s)
-        """, (request.meta.contact, request.prompt, file_id))
-        conn.commit()
-        cursor.close()
-        
-        # Шаг 6: Возвращаем ссылки
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO tour_logs (client_name, route_raw, docx_link) VALUES (%s, %s, %s)",
+                (request.meta.contact, request.prompt, file_id)
+            )
+            cursor.close()
+        except Exception as log_err:
+            print(f"Лог не записан: {log_err}")
         base_url = os.environ.get("RENDER_URL", "http://localhost:8000")
         return {
             "status": "ok",
@@ -204,121 +142,70 @@ async def generate_tour(request: GenerateRequest):
             "docx_url": f"{base_url}/download/{file_id}/docx",
             "pdf_url": f"{base_url}/download/{file_id}/pdf",
             "days_processed": len(enriched_days),
-            "places_found": sum(len(d.get("places", [])) for d in enriched_days),
-            "places_not_found": [
-                p["query"] for d in enriched_days 
-                for p in d.get("places", []) 
-                if p.get("status") == "PLACE_NOT_FOUND"
-            ]
+            "places_found": sum(1 for d in enriched_days for p in d.get("places", []) if p.get("status") == "OK"),
+            "places_not_found": [p["query"] for d in enriched_days for p in d.get("places", []) if p.get("status") == "PLACE_NOT_FOUND"]
         }
-    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=traceback.format_exc())
     finally:
         conn.close()
 
 
 @app.get("/download/{file_id}/{format}")
 def download_file(file_id: str, format: str):
-    """
-    Отдаёт файл для скачивания.
-    Render хранит временные файлы пока сервер не перезапустится.
-    """
     import glob
-    
     ext = "docx" if format == "docx" else "pdf"
-    pattern = f"/tmp/*/tour_{file_id}.{ext}"
-    files = glob.glob(pattern)
-    
+    files = glob.glob(f"/tmp/*/tour_{file_id}.{ext}")
     if not files:
-        raise HTTPException(status_code=404, detail="Файл не найден. Сгенерируйте заново.")
-    
+        raise HTTPException(status_code=404, detail="Файл не найден")
     media_type = (
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         if ext == "docx" else "application/pdf"
     )
-    
-    return FileResponse(
-        path=files[0],
-        media_type=media_type,
-        filename=f"ExploreArmenia_tour_{file_id}.{ext}"
-    )
+    return FileResponse(path=files[0], media_type=media_type,
+                        filename=f"ExploreArmenia_tour_{file_id}.{ext}")
 
-
-# ============================================================
-# CRUD для мест (Admin панель)
-# ============================================================
 
 @app.get("/places")
 def get_places(search: Optional[str] = None, category: Optional[str] = None):
-    """
-    Возвращает список всех мест из БД.
-    Параметры: ?search=хор&category=monastery
-    """
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)  # dictionary=True → возвращает dict вместо tuple
-    
+    cursor = conn.cursor(dictionary=True)
     query = "SELECT * FROM places WHERE is_active = TRUE"
     params = []
-    
     if search:
         query += " AND (name_ru LIKE %s OR name_en LIKE %s)"
         params.extend([f"%{search}%", f"%{search}%"])
-    
     if category:
         query += " AND category = %s"
         params.append(category)
-    
     query += " ORDER BY name_ru ASC"
-    
     cursor.execute(query, params)
     places = cursor.fetchall()
-    
     cursor.close()
     conn.close()
-    
     return {"places": places, "total": len(places)}
 
 
 @app.post("/places")
 def create_place(place: PlaceCreate):
-    """
-    Добавляет новое место в базу.
-    Вызывается из admin.html когда заполняешь форму.
-    """
     conn = get_db_connection()
     cursor = conn.cursor()
-    
     try:
-        # Вставляем основную запись
         cursor.execute("""
-            INSERT INTO places 
-            (slug, name_ru, name_en, name_hy, category, region,
+            INSERT INTO places (slug, name_ru, name_en, name_hy, category, region,
              desc_ru, desc_en, promo_ru, promo_en, photo_main, photo_secondary)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (
-            place.slug, place.name_ru, place.name_en, place.name_hy,
-            place.category, place.region,
-            place.desc_ru, place.desc_en,
-            place.promo_ru, place.promo_en,
-            place.photo_main, place.photo_secondary
-        ))
-        
+        """, (place.slug, place.name_ru, place.name_en, place.name_hy,
+              place.category, place.region, place.desc_ru, place.desc_en,
+              place.promo_ru, place.promo_en, place.photo_main, place.photo_secondary))
         place_id = cursor.lastrowid
-        
-        # Вставляем алиасы (альтернативные названия для поиска)
         for alias in place.aliases:
             if alias.strip():
-                cursor.execute(
-                    "INSERT INTO place_aliases (place_id, alias_name) VALUES (%s, %s)",
-                    (place_id, alias.strip())
-                )
-        
-        conn.commit()
+                cursor.execute("INSERT INTO place_aliases (place_id, alias_name) VALUES (%s, %s)",
+                               (place_id, alias.strip()))
         return {"status": "created", "id": place_id}
-    
-    except Error as e:
-        conn.rollback()
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
     finally:
         cursor.close()
         conn.close()
@@ -326,38 +213,22 @@ def create_place(place: PlaceCreate):
 
 @app.put("/places/{place_id}")
 def update_place(place_id: int, place: PlaceCreate):
-    """Редактирует существующее место"""
     conn = get_db_connection()
     cursor = conn.cursor()
-    
     try:
         cursor.execute("""
-            UPDATE places SET
-                name_ru=%s, name_en=%s, name_hy=%s, category=%s, region=%s,
-                desc_ru=%s, desc_en=%s, promo_ru=%s, promo_en=%s,
-                photo_main=%s, photo_secondary=%s
+            UPDATE places SET name_ru=%s, name_en=%s, name_hy=%s, category=%s, region=%s,
+                desc_ru=%s, desc_en=%s, promo_ru=%s, promo_en=%s, photo_main=%s, photo_secondary=%s
             WHERE id=%s
-        """, (
-            place.name_ru, place.name_en, place.name_hy,
-            place.category, place.region,
-            place.desc_ru, place.desc_en,
-            place.promo_ru, place.promo_en,
-            place.photo_main, place.photo_secondary,
-            place_id
-        ))
-        
-        # Обновляем алиасы: удаляем старые, вставляем новые
+        """, (place.name_ru, place.name_en, place.name_hy, place.category, place.region,
+              place.desc_ru, place.desc_en, place.promo_ru, place.promo_en,
+              place.photo_main, place.photo_secondary, place_id))
         cursor.execute("DELETE FROM place_aliases WHERE place_id = %s", (place_id,))
         for alias in place.aliases:
             if alias.strip():
-                cursor.execute(
-                    "INSERT INTO place_aliases (place_id, alias_name) VALUES (%s, %s)",
-                    (place_id, alias.strip())
-                )
-        
-        conn.commit()
+                cursor.execute("INSERT INTO place_aliases (place_id, alias_name) VALUES (%s, %s)",
+                               (place_id, alias.strip()))
         return {"status": "updated"}
-    
     finally:
         cursor.close()
         conn.close()
@@ -365,14 +236,9 @@ def update_place(place_id: int, place: PlaceCreate):
 
 @app.delete("/places/{place_id}")
 def delete_place(place_id: int):
-    """
-    Мягкое удаление — ставим is_active=FALSE.
-    Данные не теряются, просто скрываются.
-    """
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("UPDATE places SET is_active = FALSE WHERE id = %s", (place_id,))
-    conn.commit()
     cursor.close()
     conn.close()
     return {"status": "deleted"}
