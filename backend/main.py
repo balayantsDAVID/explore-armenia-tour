@@ -135,7 +135,7 @@ async def generate_tour(request: GenerateRequest):
                 "meta": request.meta.dict(),
                 "lang": request.lang
             }, f, ensure_ascii=False)
-        ppdf_path = os.path.join(output_dir, f"tour_{file_id}.pdf")
+        pdf_path = os.path.join(output_dir, f"tour_{file_id}.pdf")
         convert_to_pdf(docx_path, pdf_path)
         try:
             cursor = conn.cursor()
