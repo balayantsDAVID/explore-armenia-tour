@@ -2,7 +2,7 @@ import os
 import json
 import re
 from google import genai
-# from google.genai import types
+from google.genai import types
 
 # Инициализация нового клиента
 client = genai.Client(
