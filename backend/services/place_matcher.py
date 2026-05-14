@@ -2,14 +2,10 @@ import os
 import json
 import re
 from google import genai
-from google.genai import types
 
-# Инициализация нового клиента
-client = genai.Client(
-    api_key=os.environ.get("GEMINI_API_KEY"),
-    http_options={'api_version': 'v1'}
-)
-MODEL_ID = "gemini-1.5-flash"
+# Инициализация клиента (без принудительного v1, чтобы не конфликтовало)
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+MODEL_ID = "gemini-pro"  # <-- Самая стабильная и доступная всем модель
 
 async def match_places_from_route(route_text: str, db_conn, lang: str = "ru") -> list:
     days = parse_days_from_text(route_text)
@@ -64,18 +60,12 @@ def parse_days_from_text(route_text: str) -> list:
     return days
 
 async def extract_places_with_gemini(day_text: str) -> list:
-    prompt = f"Извлеки ТОЛЬКО названия достопримечательностей из текста: {day_text}. Верни только JSON массив строк."
+    prompt = f"Извлеки ТОЛЬКО названия достопримечательностей из текста: {day_text}. Верни только JSON массив строк. Без markdown разметки."
     
     try:
-        # Новый синтаксис вызова
-        response = client.models.generate_content(
-            model=MODEL_ID,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type='application/json',
-            )
-        )
-        return json.loads(response.text)
+        response = client.models.generate_content(model=MODEL_ID, contents=prompt)
+        text = re.sub(r'```json\s*|```\s*', '', response.text.strip()).strip()
+        return json.loads(text)
     except Exception as e:
         print(f"Gemini Error: {e}")
         # Наш надежный запасной вариант (regex)

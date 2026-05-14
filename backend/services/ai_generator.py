@@ -1,11 +1,8 @@
 import os
 from google import genai
 
-client = genai.Client(
-    api_key=os.environ.get("GEMINI_API_KEY"),
-    http_options={'api_version': 'v1'}
-)
-MODEL_ID = "gemini-1.5-flash"
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+MODEL_ID = "gemini-pro"  # <-- Самая стабильная и доступная всем модель
 
 async def generate_day_texts(days: list, lang: str = "ru") -> list:
     for day in days:
