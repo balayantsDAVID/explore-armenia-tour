@@ -2,11 +2,14 @@ import os
 import json
 import re
 from google import genai
-from google.genai import types
+# from google.genai import types
 
 # Инициализация нового клиента
-client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-MODEL_ID = "gemini-1.5-flash" 
+client = genai.Client(
+    api_key=os.environ.get("GEMINI_API_KEY"),
+    http_options={'api_version': 'v1'}
+)
+MODEL_ID = "gemini-1.5-flash"
 
 async def match_places_from_route(route_text: str, db_conn, lang: str = "ru") -> list:
     days = parse_days_from_text(route_text)
