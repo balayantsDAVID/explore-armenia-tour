@@ -1,28 +1,5 @@
 import os, subprocess, json
 
-def _make_pdf_reportlab(docx_path: str, pdf_path: str):
-    import os, json
-    from reportlab.pdfgen import canvas
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.units import cm
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
-
-    # ОТЛАДКА — смотрим что происходит
-    input_json = docx_path.replace('.docx', '_input.json')
-    print(f"🔍 PDF builder: docx={docx_path}")
-    print(f"🔍 PDF builder: looking for json={input_json}")
-    print(f"🔍 JSON exists: {os.path.exists(input_json)}")
-    print(f"🔍 Dir contents: {os.listdir(os.path.dirname(docx_path))}")
-
-    tour_data = None
-    if os.path.exists(input_json):
-        with open(input_json, 'r', encoding='utf-8') as f:
-            tour_data = json.load(f)
-        print(f"🔍 Tour data loaded: {len(tour_data.get('days', []))} days")
-    else:
-        print(f"❌ JSON не найден!")
-
 def convert_to_pdf(docx_path: str, pdf_path: str):
     try:
         result = subprocess.run(
