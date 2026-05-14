@@ -57,11 +57,6 @@ def build_docx(days: list, meta: dict, lang: str, output_path: str):
     if not os.path.exists(output_path):
         raise RuntimeError(f"DOCX file was not created at {output_path}")
     
-    # Чистим временный JSON
-    try:
-        os.remove(input_json_path)
-    except:
-        pass
     
     print(f"✅ DOCX готов: {output_path}")
     return output_path
