@@ -11,7 +11,7 @@ import re
 import google.generativeai as genai
 
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+gemini_model = genai.GenerativeModel("gemini-1.5-flash-latest")
 
 async def generate_day_texts(days: list, lang: str = "ru") -> list:
     """

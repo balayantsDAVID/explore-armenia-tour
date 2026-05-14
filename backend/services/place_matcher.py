@@ -4,7 +4,7 @@ import re
 import google.generativeai as genai
 
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+gemini_model = genai.GenerativeModel("gemini-1.5-flash-latest")
 
 async def match_places_from_route(route_text: str, db_conn, lang: str = "ru") -> list:
     days = parse_days_from_text(route_text)
