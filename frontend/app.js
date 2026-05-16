@@ -177,6 +177,9 @@ async function savePlace() {
   const aliasesRaw = document.getElementById('p_aliases')?.value || '';
   const aliases = aliasesRaw.split(',').map(a => a.trim()).filter(Boolean);
 
+  const img1name = document.getElementById('p_img1_name')?.value.trim() || '';
+  const img2name = document.getElementById('p_img2_name')?.value.trim() || '';
+
   const data = {
     name_ru: document.getElementById('p_name_ru').value.trim(),
     name_en: document.getElementById('p_name_en')?.value.trim() || '',
@@ -186,9 +189,10 @@ async function savePlace() {
     desc_ru: document.getElementById('p_desc_ru')?.value.trim() || '',
     promo_ru: document.getElementById('p_promo').value.trim(),
     promo_en: document.getElementById('p_promo_en')?.value.trim() || '',
-    photo_main: document.getElementById('p_img1').value.trim(),
-    photo_secondary: document.getElementById('p_img2')?.value.trim() || '',
-    aliases: aliases
+    // Строим полный URL автоматически
+    photo_main: img1name ? `${MEDIA_BASE}${img1name}` : '',
+    photo_secondary: img2name ? `${MEDIA_BASE}${img2name}` : '',
+    aliases
   };
 
   if (!data.name_ru || !data.slug) {
@@ -203,12 +207,7 @@ async function savePlace() {
     : `${RENDER_API_URL}/places`;
 
   try {
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
     if (res.ok) {
       alert(editingId ? "Место обновлено!" : "Место добавлено!");
       resetForm();
@@ -221,6 +220,27 @@ async function savePlace() {
     alert(`Ошибка сети: ${e.message}`);
   }
 }
+
+// Превью фото при вводе имени файла
+document.addEventListener('DOMContentLoaded', () => {
+  const setupPreview = (inputId, previewId) => {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    input.addEventListener('input', () => {
+      const preview = document.getElementById(previewId);
+      const filename = input.value.trim();
+      if (filename) {
+        preview.innerHTML = `<img src="${MEDIA_BASE}${filename}" 
+          class="w-full h-full object-cover rounded"
+          onerror="this.parentElement.innerHTML='<span class=\\'text-red-400 text-xs\\'>файл не найден</span>'">`;
+      } else {
+        preview.innerHTML = 'предпросмотр';
+      }
+    });
+  };
+  setupPreview('p_img1_name', 'preview_1');
+  setupPreview('p_img2_name', 'preview_2');
+});
 
 
 // ============================================================

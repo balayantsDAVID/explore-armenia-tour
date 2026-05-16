@@ -28,9 +28,33 @@
             </div>
             <textarea id="p_promo" rows="3" class="w-full p-2 border rounded mb-4"
                 placeholder="Маркетинговое описание для ворда..."></textarea>
-            <div class="grid grid-cols-2 gap-4 mb-4">
-                <input type="text" id="p_img1" placeholder="URL Фото 1 (Cloudflare R2)" class="p-2 border rounded">
-                <input type="text" id="p_img2" placeholder="URL Фото 2" class="p-2 border rounded">
+            <!-- Вместо полей p_img1 и p_img2 -->
+            <div class="mb-4">
+                <label class="block text-sm font-semibold mb-2">Фото места</label>
+                <p class="text-xs text-gray-400 mb-2">
+                    Загрузи фото в папку <code>media/</code> через файловый менеджер Бегета,<br>
+                    затем введи имя файла (например: <code>khor-virap-1.jpg</code>)
+                </p>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-xs text-gray-500">Фото 1 (главное)</label>
+                        <input type="text" id="p_img1_name" placeholder="khor-virap-1.jpg"
+                            class="w-full p-2 border rounded text-sm mt-1">
+                        <div id="preview_1"
+                            class="mt-2 h-24 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs">
+                            предпросмотр
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500">Фото 2</label>
+                        <input type="text" id="p_img2_name" placeholder="khor-virap-2.jpg"
+                            class="w-full p-2 border rounded text-sm mt-1">
+                        <div id="preview_2"
+                            class="mt-2 h-24 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs">
+                            предпросмотр
+                        </div>
+                    </div>
+                </div>
             </div>
             <button onclick="savePlace()" class="bg-green-600 text-white px-6 py-2 rounded font-bold">Сохранить в
                 базу</button>
