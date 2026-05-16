@@ -24,13 +24,13 @@ async def enrich_description(name: str, raw_desc: str, lang: str = "ru") -> str:
     try:
         response = client.models.generate_content(model=MODEL_ID, contents=prompt)
         return response.text.strip()
-    except:
-        return raw_desc
+    except Exception:
+        return raw_desc  # возвращаем оригинал без AI
 
 async def generate_fallback_text(place_name: str, lang: str = "ru") -> str:
     prompt = f"Напиши 1-2 предложения о достопримечательности {place_name} на языке {lang}."
     try:
         response = client.models.generate_content(model=MODEL_ID, contents=prompt)
         return f"[AI] {response.text.strip()}"
-    except:
-        return f"Прекрасное место {place_name} в вашем маршруте."
+    except Exception:
+        return ""  # пустая строка — место просто покажется без описания

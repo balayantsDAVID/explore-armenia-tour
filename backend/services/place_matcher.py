@@ -58,16 +58,16 @@ def parse_days_from_text(route_text: str) -> list:
 
 async def extract_places_with_gemini(day_text: str) -> list:
     prompt = f"Извлеки ТОЛЬКО названия достопримечательностей из текста: {day_text}. Верни только JSON массив строк. Без markdown разметки."
-    
     try:
         response = client.models.generate_content(model=MODEL_ID, contents=prompt)
         text = re.sub(r'```json\s*|```\s*', '', response.text.strip()).strip()
         return json.loads(text)
     except Exception as e:
         print(f"Gemini Error: {e}")
-        # Наш надежный запасной вариант (regex)
-        return [p.strip() for p in re.split(r'\s*[–—-]\s*', day_text) if len(p.strip()) > 3]
-
+        # Fallback: regex парсинг без AI
+        parts = re.split(r'\s*[–—-]\s*', day_text)
+        return [p.strip() for p in parts if len(p.strip()) > 3]
+    
 def find_place_in_db(place_name: str, db_conn, lang: str = "ru") -> dict:
     cursor = db_conn.cursor()
     try:
