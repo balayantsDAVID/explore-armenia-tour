@@ -76,8 +76,8 @@ async function generateTour() {
     setStatus(`✅ Документ готов! Дней: ${data.days_processed} | Мест найдено: ${data.places_found}`);
 
     resultArea.classList.remove('hidden');
-    document.getElementById('link_docx').href = data.docx_url;
-    document.getElementById('link_pdf').href = data.pdf_url;
+    document.getElementById('link_docx').href = `${RENDER_API_URL}/download/${data.file_id}/docx`;
+    document.getElementById('link_pdf').href = `${RENDER_API_URL}/download/${data.file_id}/pdf`;
     document.getElementById('result_info').innerText =
       `Дней: ${data.days_processed} | Мест найдено: ${data.places_found}`;
 
