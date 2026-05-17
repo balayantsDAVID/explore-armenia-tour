@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="robots" content="noindex, nofollow">
+    <title>ExploreArmenia | База мест</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 p-8">
+    <div class="max-w-6xl mx-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-bold">Управление достопримечательностями</h2>
+            <a href="index.html" class="text-cyan-600 underline">← К генератору</a>
+        </div>
+
+        <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+            <h3 class="font-bold mb-4">Добавить новое место</h3>
+            <div class="grid grid-cols-3 gap-4 mb-4">
+                <input type="text" id="p_name" placeholder="Название (Хор Вирап)" class="p-2 border rounded">
+                <input type="text" id="p_slug" placeholder="Slug (khor-virap)" class="p-2 border rounded">
+                <select id="p_cat" class="p-2 border rounded">
+                    <option value="monastery">Монастырь</option>
+                    <option value="winery">Винодельня</option>
+                    <option value="nature">Природа</option>
+                </select>
+            </div>
+            <textarea id="p_promo" rows="3" class="w-full p-2 border rounded mb-4"
+                placeholder="Маркетинговое описание для ворда..."></textarea>
+            <!-- Вместо полей p_img1 и p_img2 -->
+            <div class="mb-4">
+                <label class="block text-sm font-semibold mb-2">Фото места</label>
+                <p class="text-xs text-gray-400 mb-2">
+                    Загрузи фото в папку <code>media/</code> через файловый менеджер Бегета,<br>
+                    затем введи имя файла (например: <code>khor-virap-1.jpg</code>)
+                </p>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-xs text-gray-500">Фото 1 (главное)</label>
+                        <input type="text" id="p_img1_name" placeholder="khor-virap-1.jpg"
+                            class="w-full p-2 border rounded text-sm mt-1">
+                        <div id="preview_1"
+                            class="mt-2 h-24 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs">
+                            предпросмотр
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500">Фото 2</label>
+                        <input type="text" id="p_img2_name" placeholder="khor-virap-2.jpg"
+                            class="w-full p-2 border rounded text-sm mt-1">
+                        <div id="preview_2"
+                            class="mt-2 h-24 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs">
+                            предпросмотр
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <button onclick="savePlace()" class="bg-green-600 text-white px-6 py-2 rounded font-bold">Сохранить в
+                базу</button>
+        </div>
+
+        <div id="places_list" class="grid grid-cols-1 gap-2">
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+
+</html>
