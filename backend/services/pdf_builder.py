@@ -1,29 +1,12 @@
 import os, subprocess, json
 
-def _make_pdf_reportlab(docx_path: str, pdf_path: str):
-    import os, json
-    from reportlab.pdfgen import canvas
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.units import cm
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
 
-    # ОТЛАДКА — смотрим что происходит
-    input_json = docx_path.replace('.docx', '_input.json')
-    print(f"🔍 PDF builder: docx={docx_path}")
-    print(f"🔍 PDF builder: looking for json={input_json}")
-    print(f"🔍 JSON exists: {os.path.exists(input_json)}")
-    print(f"🔍 Dir contents: {os.listdir(os.path.dirname(docx_path))}")
-
-    tour_data = None
-    if os.path.exists(input_json):
-        with open(input_json, 'r', encoding='utf-8') as f:
-            tour_data = json.load(f)
-        print(f"🔍 Tour data loaded: {len(tour_data.get('days', []))} days")
-    else:
-        print(f"❌ JSON не найден!")
-
-def convert_to_pdf(docx_path: str, pdf_path: str):
+def convert_to_pdf(docx_path: str, pdf_path: str, tour_data: dict = None):
+    """
+    Конвертирует DOCX в PDF.
+    tour_data передаётся напрямую из main.py — не ищем файл на диске.
+    """
+    # Пробуем LibreOffice (на Render недоступен, но на случай если появится)
     try:
         result = subprocess.run(
             ["libreoffice", "--headless", "--convert-to", "pdf",
@@ -34,59 +17,58 @@ def convert_to_pdf(docx_path: str, pdf_path: str):
         if os.path.exists(auto_pdf):
             if auto_pdf != pdf_path:
                 os.rename(auto_pdf, pdf_path)
+            print(f"✅ PDF via LibreOffice: {pdf_path}")
             return pdf_path
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-    _make_pdf_reportlab(docx_path, pdf_path)
+        pass  # LibreOffice недоступен — идём к reportlab
+
+    # Основной путь — reportlab
+    _make_pdf_reportlab(docx_path, pdf_path, tour_data)
     return pdf_path
 
 
-def _make_pdf_reportlab(docx_path: str, pdf_path: str):
+def _make_pdf_reportlab(docx_path: str, pdf_path: str, tour_data: dict = None):
+    """
+    Создаёт PDF через reportlab.
+    Данные тура берутся из tour_data (передаётся напрямую).
+    """
     from reportlab.pdfgen import canvas
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import cm
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
 
-    # Регистрируем шрифт с поддержкой кириллицы
-    # DejaVu есть на большинстве Linux систем включая Render
-    font_paths = [
+    # Если данные не переданы напрямую — пробуем найти JSON файл
+    if tour_data is None:
+        input_json = docx_path.replace('.docx', '_input.json')
+        print(f"🔍 tour_data не передан, ищем JSON: {input_json}")
+        print(f"🔍 JSON exists: {os.path.exists(input_json)}")
+        if os.path.exists(input_json):
+            with open(input_json, 'r', encoding='utf-8') as f:
+                tour_data = json.load(f)
+            print(f"✅ JSON загружен: {len(tour_data.get('days', []))} дней")
+        else:
+            print("❌ JSON не найден и tour_data не передан — PDF будет пустым")
+
+    # Регистрируем шрифт с кириллицей
+    font_regular = 'Helvetica'
+    font_bold = 'Helvetica-Bold'
+    for path in [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/DejaVuSans.ttf",
-    ]
-    font_bold_paths = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/DejaVuSans-Bold.ttf",
-    ]
-
-    font_regular = None
-    font_bold = None
-
-    for path in font_paths:
+    ]:
         if os.path.exists(path):
             pdfmetrics.registerFont(TTFont('DejaVu', path))
             font_regular = 'DejaVu'
             break
-
-    for path in font_bold_paths:
+    for path in [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+    ]:
         if os.path.exists(path):
             pdfmetrics.registerFont(TTFont('DejaVuBold', path))
             font_bold = 'DejaVuBold'
             break
-
-    # Если DejaVu не найден — используем встроенный Helvetica (без кириллицы, но не падает)
-    if not font_regular:
-        font_regular = 'Helvetica'
-        font_bold = 'Helvetica-Bold'
-
-    # Читаем данные тура
-    input_json = docx_path.replace('.docx', '_input.json')
-    tour_data = None
-    if not os.path.exists(input_json):
-        base = os.path.splitext(docx_path)[0]
-        input_json = f"{base}_input.json"
 
     w, h = A4
     c = canvas.Canvas(pdf_path, pagesize=A4)
@@ -104,13 +86,12 @@ def _make_pdf_reportlab(docx_path: str, pdf_path: str):
         c.drawCentredString(w / 2, 28, "Армения - страна, в которую можно влюбиться!")
         c.setFillColorRGB(0.4, 0.4, 0.4)
         c.setFont(font_regular, 8)
-        c.drawCentredString(w / 2, 16, "(+374 91) 01 56 60  |  info@explorearmenia.am  |  www.explorearmenia.am")
+        c.drawCentredString(w / 2, 16,
+            "(+374 91) 01 56 60  |  info@explorearmenia.am  |  www.explorearmenia.am")
 
     def wrap_text(text, max_chars=90):
-        """Разбивает текст на строки по max_chars символов"""
         words = text.split()
-        lines = []
-        line = ""
+        lines, line = [], ""
         for word in words:
             if len(line + " " + word) <= max_chars:
                 line = (line + " " + word).strip()
@@ -125,26 +106,29 @@ def _make_pdf_reportlab(docx_path: str, pdf_path: str):
     # === СТРАНИЦА 1: ДАННЫЕ ТУРА ===
     draw_header()
     draw_footer()
-
     y = h - 80
+
     if tour_data and tour_data.get('meta'):
         meta = tour_data['meta']
-        fields = [
-            ("Дата начала тура:", meta.get('start', '')),
-            ("Дата окончания тура:", meta.get('end', '')),
-            ("Рейс прилета:", meta.get('flight_in', '')),
-            ("Рейс вылета:", meta.get('flight_out', '')),
-            ("Количество участников:", meta.get('guests', '')),
-            ("Отель:", meta.get('hotel', '')),
-            ("Контактное лицо:", meta.get('contact', '')),
-        ]
-        for label, value in fields:
+        for label, key in [
+            ("Дата начала тура:",      'start'),
+            ("Дата окончания тура:",   'end'),
+            ("Рейс прилета:",          'flight_in'),
+            ("Рейс вылета:",           'flight_out'),
+            ("Количество участников:", 'guests'),
+            ("Отель:",                 'hotel'),
+            ("Контактное лицо:",       'contact'),
+        ]:
             c.setFillColorRGB(0, 0, 0)
             c.setFont(font_bold, 11)
             c.drawString(2 * cm, y, label)
             c.setFont(font_regular, 11)
-            c.drawString(8 * cm, y, str(value))
+            c.drawString(8 * cm, y, str(meta.get(key, '')))
             y -= 22
+    else:
+        c.setFillColorRGB(0.5, 0.5, 0.5)
+        c.setFont(font_regular, 11)
+        c.drawCentredString(w / 2, h / 2, "Данные тура недоступны")
 
     # === СТРАНИЦЫ ДНЕЙ ===
     if tour_data and tour_data.get('days'):
@@ -160,14 +144,16 @@ def _make_pdf_reportlab(docx_path: str, pdf_path: str):
             c.drawCentredString(w / 2, y, day.get('day_label', ''))
             y -= 18
 
-            # Подзаголовок (список мест через тире)
-            found = [p.get('name') or p.get('query','') for p in day.get('places', []) if p.get('status') == 'OK']
+            # Подзаголовок — список найденных мест
+            found = [
+                p.get('name') or p.get('query', '')
+                for p in day.get('places', [])
+                if p.get('status') == 'OK'
+            ]
             if found:
-                subtitle = " – ".join(found)
                 c.setFillColorRGB(0, 0, 0)
                 c.setFont(font_bold, 10)
-                lines = wrap_text(subtitle, 80)
-                for line in lines:
+                for line in wrap_text(" – ".join(found), 80):
                     c.drawCentredString(w / 2, y, line)
                     y -= 14
             y -= 6
@@ -181,7 +167,9 @@ def _make_pdf_reportlab(docx_path: str, pdf_path: str):
                     y = h - 72
 
                 name = place.get('name') or place.get('query', '')
-                text = place.get('final_text') or place.get('promo_text') or place.get('description', '')
+                text = (place.get('final_text') or
+                        place.get('promo_text') or
+                        place.get('description', ''))
 
                 # Название места
                 c.setFillColorRGB(0, 0.4, 0.6)
@@ -190,7 +178,7 @@ def _make_pdf_reportlab(docx_path: str, pdf_path: str):
                 y -= 14
 
                 # Текст описания
-                if text and not text.startswith('[AI]'):
+                if text and text.strip():
                     c.setFillColorRGB(0.15, 0.15, 0.15)
                     c.setFont(font_regular, 9)
                     for line in wrap_text(text, 95):

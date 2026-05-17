@@ -136,7 +136,10 @@ async def generate_tour(request: GenerateRequest):
                 "lang": request.lang
             }, f, ensure_ascii=False)
         pdf_path = os.path.join(output_dir, f"tour_{file_id}.pdf")
-        convert_to_pdf(docx_path, pdf_path)
+        convert_to_pdf(docx_path, pdf_path, tour_data={
+            "days": enriched_days,
+            "meta": request.meta.dict()
+        })
         try:
             cursor = conn.cursor()
             cursor.execute(

@@ -229,53 +229,37 @@
     async function uploadPhoto(file, num) {
       const status = document.getElementById(`upload_status_${num}`);
       const preview = document.getElementById(`preview_container_${num}`);
-      const zone = document.getElementById(`upload_zone_${num}`);
 
-      // Показываем превью сразу (локально)
+      // Показываем превью сразу локально
       const localUrl = URL.createObjectURL(file);
       preview.innerHTML = `<img src="${localUrl}" class="photo-preview">`;
       status.classList.remove('hidden');
-      status.innerHTML = `<span class="spinner inline-block">⏳</span> Загружаем...`;
+      status.innerHTML = `⏳ Загружаем...`;
 
       try {
-        // Загружаем через наш backend на Render
-        // Backend сохранит файл и вернёт URL
         const formData = new FormData();
         formData.append('file', file);
 
-        const res = await fetch(`${RENDER_API_URL}/upload-photo`, {
-          method: 'POST',
-          body: formData
-        });
+        // Загружаем напрямую на Бегет через PHP
+        const res = await fetch(
+          `https://test.explorearmenia.am/upload.php?key=explorearmenia2026`,
+          { method: 'POST', body: formData }
+        );
 
-        if (res.ok) {
-          const data = await res.json();
+        const data = await res.json();
+
+        if (data.url) {
           document.getElementById(`p_img${num}`).value = data.url;
           document.getElementById(`img${num}_url`).textContent = data.url;
-          status.innerHTML = `✅ Загружено`;
-          status.classList.remove('hidden');
-          // Показываем реальное фото
           preview.innerHTML = `<img src="${data.url}" class="photo-preview">`;
+          status.innerHTML = `✅ Загружено`;
         } else {
-          throw new Error('Upload failed');
+          throw new Error(data.error || 'Upload failed');
         }
       } catch (e) {
-        // Fallback: сохраняем локальный превью, просим ввести путь вручную
-        status.innerHTML = `⚠️ Авто-загрузка недоступна. Загрузи файл на Бегет вручную и введи имя:`;
-        status.classList.remove('hidden');
-
-        // Показываем поле для ввода имени файла
-        zone.insertAdjacentHTML('afterend', `
-      <div class="mt-2 flex gap-2">
-        <input type="text" id="manual_name_${num}" placeholder="${file.name}"
-          class="flex-1 p-2 border rounded text-xs"
-          value="${file.name}"
-          oninput="setManualUrl('${num}', this.value)">
-        <button onclick="setManualUrl('${num}', document.getElementById('manual_name_${num}').value)"
-          class="bg-cyan-600 text-white px-3 py-1 rounded text-xs">OK</button>
-      </div>
-    `);
-        setManualUrl(num, file.name);
+        status.innerHTML = `❌ Ошибка: ${e.message}`;
+        // Оставляем локальный превью, просим ввести вручную
+        document.getElementById(`p_img${num}`).value = '';
       }
     }
 
