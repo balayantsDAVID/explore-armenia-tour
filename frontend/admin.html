@@ -26,9 +26,10 @@
 
     .photo-preview {
       width: 100%;
-      height: 120px;
+      height: 300px;
       object-fit: cover;
       border-radius: 8px;
+      display: block;
     }
   </style>
 </head>
@@ -129,7 +130,7 @@
 
       <div class="mb-5">
         <label class="block text-xs font-semibold text-gray-500 mb-1">Главное изображение</label>
-        <div class="max-w-md">
+        <div class="w-full">
           <div id="upload_zone_1" class="upload-zone rounded-lg p-4 text-center cursor-pointer relative"
             onclick="document.getElementById('file_input_1').click()" ondragover="handleDragOver(event)"
             ondragleave="handleDragLeave()" ondrop="handleDrop(event)">

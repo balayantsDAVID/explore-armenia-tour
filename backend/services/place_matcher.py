@@ -23,7 +23,7 @@ async def match_places_from_route(route_text: str, db_conn, lang: str = "ru") ->
             db_place = find_place_in_db(place_name, db_conn, lang)
             places_data.append(db_place)
 
-        # Убираем дубликаты по ID
+        # Убираем дубликаты
         seen_ids = set()
         unique_places = []
         for p in places_data:
@@ -31,12 +31,11 @@ async def match_places_from_route(route_text: str, db_conn, lang: str = "ru") ->
             if pid and pid not in seen_ids:
                 seen_ids.add(pid)
                 unique_places.append(p)
-            elif not pid: # Если место не в базе, оставляем для AI генерации
+            elif not pid:
                 unique_places.append(p)
 
         result.append({
             "day_number": day["day_number"],
-            "day_label": day["day_label"],
             "raw_text": day["raw_text"],
             "places": unique_places
         })
@@ -44,51 +43,48 @@ async def match_places_from_route(route_text: str, db_conn, lang: str = "ru") ->
 
 def parse_days_from_text(route_text: str) -> list:
     days = []
-    pattern = r'(День\s+(\d+)\s*(?:\([^)]+\))?)\s*[—–-]\s*(.+?)(?=День\s+\d+|$)'
+    # Ловим любой формат "День 1" и берем текст до следующего дня
+    pattern = r'(День\s+(\d+).*?)\s*[—–-]\s*(.+?)(?=День\s+\d+|$)'
     matches = re.findall(pattern, route_text, re.IGNORECASE | re.DOTALL)
+    
     for match in matches:
         days.append({
             "day_number": int(match[1]),
-            "day_label": match[0].strip(),
             "raw_text": match[2].strip().replace('\n', ' ')
         })
     if not days:
-        days.append({"day_number": 1, "day_label": "День 1", "raw_text": route_text.strip()})
+        days.append({"day_number": 1, "raw_text": route_text.strip()})
     return days
 
 async def extract_places_with_gemini(day_text: str) -> list:
-    prompt = f"Извлеки ТОЛЬКО названия достопримечательностей из текста: {day_text}. Верни только JSON массив строк. Без markdown разметки."
+    prompt = f"Извлеки ТОЛЬКО названия достопримечательностей из текста: {day_text}. Верни JSON массив строк. Без markdown."
     try:
         response = client.models.generate_content(model=MODEL_ID, contents=prompt)
         text = re.sub(r'```json\s*|```\s*', '', response.text.strip()).strip()
         return json.loads(text)
     except Exception as e:
-        print(f"Gemini Error: {e}")
-        # Fallback: regex парсинг без AI
         parts = re.split(r'\s*[–—-]\s*', day_text)
         return [p.strip() for p in parts if len(p.strip()) > 3]
-    
+
 def find_place_in_db(place_name: str, db_conn, lang: str = "ru") -> dict:
     cursor = db_conn.cursor()
     try:
-        name_field = "name_en" if lang == "en" else "name_ru"
-        desc_field = "desc_en" if lang == "en" else "desc_ru"
-        promo_field = "promo_en" if lang == "en" else "promo_ru"
+        # Умный выбор языка из БД
+        name_field = f"name_{lang}" if lang in ["ru", "en", "de", "hy"] else "name_ru"
+        desc_field = f"desc_{lang}" if lang in ["ru", "en", "de", "hy"] else "desc_ru"
         
         query = f"""
-            SELECT p.id, p.{name_field} as name, p.name_ru,
-            p.{desc_field} as description, p.{promo_field} as promo_text,
-            p.photo_main, p.category, p.region
+            SELECT p.id, p.{name_field} as name, p.{desc_field} as description, p.photo_main
             FROM places p
             LEFT JOIN place_aliases pa ON pa.place_id = p.id
-            WHERE p.is_active = TRUE 
-            AND (p.name_ru LIKE %s OR p.name_en LIKE %s OR pa.alias_name LIKE %s)
+            WHERE p.slug = %s OR p.name_ru LIKE %s OR p.name_en LIKE %s OR p.name_de LIKE %s OR p.name_hy LIKE %s OR pa.alias_name LIKE %s
             LIMIT 1
         """
-        cursor.execute(query, [f"%{place_name}%"] * 3)
+        like_val = f"%{place_name}%"
+        cursor.execute(query, (place_name, like_val, like_val, like_val, like_val, like_val))
         result = cursor.fetchone()
         if result:
             return {"query": place_name, "status": "OK", **result}
-        return {"query": place_name, "status": "PLACE_NOT_FOUND", "description": "", "promo_text": ""}
+        return {"query": place_name, "status": "PLACE_NOT_FOUND", "description": ""}
     finally:
         cursor.close()

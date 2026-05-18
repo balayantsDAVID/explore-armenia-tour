@@ -1,36 +1,35 @@
-import os
-from google import genai
+import datetime
 
-client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-MODEL_ID = "gemini-3.1-flash-lite"
+# Мультиязычные словари дней недели
+WEEKDAYS = {
+    "ru": ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"],
+    "en": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+    "de": ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"],
+    "hy": ["Երկուշաբթի", "Երեքշաբթի", "Չորեքշաբթի", "Հինգշաբթի", "Ուրբաթ", "Շաբաթ", "Կիրակի"]
+}
 
-async def generate_day_texts(days: list, lang: str = "ru") -> list:
-    for day in days:
+async def generate_day_texts(days: list, meta: dict, lang: str = "ru") -> list:
+    # 1. Берем дату старта из календаря
+    start_date_str = meta.get("start", "")
+    try:
+        start_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d")
+    except ValueError:
+        start_date = datetime.datetime.now()
+
+    for i, day in enumerate(days):
+        # 2. Автоматический расчет дат
+        current_date = start_date + datetime.timedelta(days=i)
+        day_str = current_date.strftime("%d.%m")
+        weekday = WEEKDAYS.get(lang, WEEKDAYS["ru"])[current_date.weekday()]
+        
+        # Сохраняем строку: "07.05, четверг"
+        day["date_str"] = f"{day_str}, {weekday}"
+        
+        # 3. Строгий перенос данных из базы (никакого ИИ)
         for place in day["places"]:
             if place["status"] == "PLACE_NOT_FOUND":
-                place["final_text"] = await generate_fallback_text(place["query"], lang)
-            elif not place.get("promo_text", "").strip():
-                place["final_text"] = await enrich_description(
-                    place.get("name", place["query"]), 
-                    place.get("description", ""), 
-                    lang
-                )
+                place["final_text"] = "" 
             else:
-                place["final_text"] = place["promo_text"]
+                place["final_text"] = place.get("description", "")
+                
     return days
-
-async def enrich_description(name: str, raw_desc: str, lang: str = "ru") -> str:
-    prompt = f"Перепиши описание места {name} в красивый туристический текст на языке {lang}. База: {raw_desc}"
-    try:
-        response = client.models.generate_content(model=MODEL_ID, contents=prompt)
-        return response.text.strip()
-    except Exception:
-        return raw_desc  # возвращаем оригинал без AI
-
-async def generate_fallback_text(place_name: str, lang: str = "ru") -> str:
-    prompt = f"Напиши 1-2 предложения о достопримечательности {place_name} на языке {lang}."
-    try:
-        response = client.models.generate_content(model=MODEL_ID, contents=prompt)
-        return f"[AI] {response.text.strip()}"
-    except Exception:
-        return ""  # пустая строка — место просто покажется без описания

@@ -119,7 +119,7 @@ async def generate_tour(request: GenerateRequest):
     conn = get_db_connection()
     try:
         matched_days = await match_places_from_route(request.prompt, conn, request.lang)
-        enriched_days = await generate_day_texts(matched_days, request.lang)
+        enriched_days = await generate_day_texts(matched_days, request.meta.dict(), request.lang)
         file_id = str(uuid.uuid4())[:8]
         output_dir = tempfile.mkdtemp()
         docx_path = os.path.join(output_dir, f"tour_{file_id}.docx")
