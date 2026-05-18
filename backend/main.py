@@ -70,18 +70,16 @@ class GenerateRequest(BaseModel):
     meta: TourMeta
 
 class PlaceCreate(BaseModel):
+    slug: str
     name_ru: str
     name_en: Optional[str] = ""
+    name_de: Optional[str] = ""
     name_hy: Optional[str] = ""
-    slug: str
-    category: str = "monastery"
-    region: Optional[str] = ""
     desc_ru: Optional[str] = ""
     desc_en: Optional[str] = ""
-    promo_ru: Optional[str] = ""
-    promo_en: Optional[str] = ""
+    desc_de: Optional[str] = ""
+    desc_hy: Optional[str] = ""
     photo_main: Optional[str] = ""
-    photo_secondary: Optional[str] = ""
     aliases: Optional[List[str]] = []
 
 
@@ -181,17 +179,16 @@ def download_file(file_id: str, format: str):
 
 
 @app.get("/places")
-def get_places(search: Optional[str] = None, category: Optional[str] = None):
+def get_places(search: Optional[str] = None):
     conn = get_db_connection()
     cursor = conn.cursor()
     query = "SELECT * FROM places WHERE is_active = TRUE"
     params = []
     if search:
-        query += " AND (name_ru LIKE %s OR name_en LIKE %s)"
-        params.extend([f"%{search}%", f"%{search}%"])
-    if category:
-        query += " AND category = %s"
-        params.append(category)
+        # Ищем совпадения на любом из 4 языков
+        query += " AND (name_ru LIKE %s OR name_en LIKE %s OR name_de LIKE %s OR name_hy LIKE %s)"
+        params.extend([f"%{search}%", f"%{search}%", f"%{search}%", f"%{search}%"])
+    
     query += " ORDER BY name_ru ASC"
     cursor.execute(query, params)
     places = cursor.fetchall()
@@ -206,12 +203,11 @@ def create_place(place: PlaceCreate):
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            INSERT INTO places (slug, name_ru, name_en, name_hy, category, region,
-             desc_ru, desc_en, promo_ru, promo_en, photo_main, photo_secondary)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (place.slug, place.name_ru, place.name_en, place.name_hy,
-              place.category, place.region, place.desc_ru, place.desc_en,
-              place.promo_ru, place.promo_en, place.photo_main, place.photo_secondary))
+            INSERT INTO places (slug, name_ru, name_en, name_de, name_hy,
+             desc_ru, desc_en, desc_de, desc_hy, photo_main)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (place.slug, place.name_ru, place.name_en, place.name_de, place.name_hy,
+              place.desc_ru, place.desc_en, place.desc_de, place.desc_hy, place.photo_main))
         place_id = cursor.lastrowid
         for alias in place.aliases:
             if alias.strip():
@@ -224,22 +220,26 @@ def create_place(place: PlaceCreate):
         cursor.close()
         conn.close()
 
-
 @app.put("/places/{place_id}")
 def update_place(place_id: int, place: PlaceCreate):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            UPDATE places SET name_ru=%s, name_en=%s, name_hy=%s, category=%s, region=%s,
-                desc_ru=%s, desc_en=%s, promo_ru=%s, promo_en=%s, photo_main=%s, photo_secondary=%s
+            UPDATE places SET 
+                slug=%s, 
+                name_ru=%s, name_en=%s, name_de=%s, name_hy=%s,
+                desc_ru=%s, desc_en=%s, desc_de=%s, desc_hy=%s, 
+                photo_main=%s
             WHERE id=%s
         """, (
-            place.name_ru, place.name_en, place.name_hy, place.category, place.region,
-            place.desc_ru, place.desc_en, place.promo_ru, place.promo_en,
-            place.photo_main, place.photo_secondary, place_id
+            place.slug, 
+            place.name_ru, place.name_en, place.name_de, place.name_hy,
+            place.desc_ru, place.desc_en, place.desc_de, place.desc_hy,
+            place.photo_main, place_id
         ))
         conn.commit()
+        
         cursor.execute("DELETE FROM place_aliases WHERE place_id = %s", (place_id,))
         for alias in place.aliases:
             if alias.strip():

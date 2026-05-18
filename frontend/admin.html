@@ -29,24 +29,13 @@
       object-fit: cover;
       border-radius: 8px;
     }
-
-    .spinner {
-      animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-      to {
-        transform: rotate(360deg);
-      }
-    }
   </style>
 </head>
 
 <body class="bg-gray-50 min-h-screen">
 
-  <!-- Хедер -->
   <div class="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10">
-    <h1 class="text-xl font-bold text-gray-800">🗺 База достопримечательностей</h1>
+    <h1 class="text-xl font-bold text-gray-800">🗺 База достопримечательностей (Мультиязычная)</h1>
     <div class="flex items-center gap-4">
       <span id="places_counter" class="text-sm text-gray-400"></span>
       <a href="index.html" class="text-sm text-cyan-600 hover:text-cyan-700 font-medium">← К генератору</a>
@@ -55,16 +44,14 @@
 
   <div class="max-w-6xl mx-auto p-6">
 
-    <!-- Форма добавления/редактирования -->
     <div id="place_form" class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
       <div class="flex justify-between items-center mb-5">
         <h3 class="text-lg font-bold text-gray-800">Добавить новое место</h3>
-        <button onclick="resetForm()" class="text-xs text-gray-400 hover:text-gray-600">✕ Сбросить</button>
+        <button onclick="resetForm()" class="text-xs text-gray-400 hover:text-gray-600">✕ Сбросить форматы</button>
       </div>
       <input type="hidden" id="editing_id">
 
-      <!-- Основные поля -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
         <div>
           <label class="block text-xs font-semibold text-gray-500 mb-1">Название RU *</label>
           <input type="text" id="p_name_ru" placeholder="Монастырь Хор Вирап"
@@ -76,86 +63,71 @@
             class="w-full p-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-cyan-400">
         </div>
         <div>
-          <label class="block text-xs font-semibold text-gray-500 mb-1">Slug *</label>
+          <label class="block text-xs font-semibold text-gray-500 mb-1">Название DE</label>
+          <input type="text" id="p_name_de" placeholder="Kloster Chor Virap"
+            class="w-full p-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-cyan-400">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-500 mb-1">Название HY</label>
+          <input type="text" id="p_name_hy" placeholder="Խոր Վիրապ վանք"
+            class="w-full p-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-cyan-400">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div>
+          <label class="block text-xs font-semibold text-gray-500 mb-1">Slug * (уникальный ID латиницей)</label>
           <input type="text" id="p_slug" placeholder="khor-virap"
             class="w-full p-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-cyan-400">
         </div>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         <div>
-          <label class="block text-xs font-semibold text-gray-500 mb-1">Категория</label>
-          <select id="p_cat"
-            class="w-full p-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:border-cyan-400">
-            <option value="monastery">Монастырь</option>
-            <option value="museum">Музей</option>
-            <option value="nature">Природа</option>
-            <option value="winery">Винодельня</option>
-            <option value="cave">Пещера</option>
-            <option value="city">Город</option>
-            <option value="activity">Активность</option>
-            <option value="restaurant">Ресторан</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-500 mb-1">Регион</label>
-          <input type="text" id="p_region" placeholder="Арарат"
-            class="w-full p-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-cyan-400">
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-500 mb-1">Псевдонимы (через запятую)</label>
-          <input type="text" id="p_aliases" placeholder="Хор-Вирап, Khor Virap"
+          <label class="block text-xs font-semibold text-gray-500 mb-1">Псевдонимы ИИ (через запятую)</label>
+          <input type="text" id="p_aliases" placeholder="Хор-Вирап, Хор Вирап, Khor Virap"
             class="w-full p-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-cyan-400">
         </div>
       </div>
 
-      <div class="mb-4">
-        <label class="block text-xs font-semibold text-gray-500 mb-1">Маркетинговое описание (для документа)</label>
-        <textarea id="p_promo" rows="3" placeholder="У подножия величественного Арарата возвышается Хор Вирап..."
-          class="w-full p-2.5 border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:border-cyan-400"></textarea>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div>
+          <label class="block text-xs font-semibold text-gray-500 mb-1">Описание RU</label>
+          <textarea id="p_desc_ru" rows="3" placeholder="Описание на русском языке..."
+            class="w-full p-2.5 border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:border-cyan-400"></textarea>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-500 mb-1">Описание EN</label>
+          <textarea id="p_desc_en" rows="3" placeholder="Description in English..."
+            class="w-full p-2.5 border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:border-cyan-400"></textarea>
+        </div>
       </div>
 
-      <!-- Загрузка фото -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div>
+          <label class="block text-xs font-semibold text-gray-500 mb-1">Описание DE</label>
+          <textarea id="p_desc_de" rows="3" placeholder="Beschreibung auf Deutsch..."
+            class="w-full p-2.5 border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:border-cyan-400"></textarea>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-500 mb-1">Описание HY</label>
+          <textarea id="p_desc_hy" rows="3" placeholder="Նկարագրություն հայերենով..."
+            class="w-full p-2.5 border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:border-cyan-400"></textarea>
+        </div>
+      </div>
+
       <div class="mb-5">
-        <label class="block text-xs font-semibold text-gray-500 mb-2">Фотографии</label>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-          <!-- Фото 1 -->
-          <div>
-            <p class="text-xs text-gray-400 mb-1">Главное фото</p>
-            <div id="upload_zone_1" class="upload-zone rounded-lg p-4 text-center cursor-pointer relative"
-              onclick="document.getElementById('file_input_1').click()" ondragover="handleDragOver(event, '1')"
-              ondragleave="handleDragLeave('1')" ondrop="handleDrop(event, '1')">
-              <input type="file" id="file_input_1" accept="image/*" class="hidden"
-                onchange="handleFileSelect(event, '1')">
-              <div id="preview_container_1">
-                <div class="text-gray-300 text-3xl mb-1">📷</div>
-                <p class="text-xs text-gray-400">Нажми или перетащи фото</p>
-              </div>
-              <div id="upload_status_1" class="hidden text-xs text-cyan-600 mt-1"></div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1">Главное изображение</label>
+        <div class="max-w-md">
+          <div id="upload_zone_1" class="upload-zone rounded-lg p-4 text-center cursor-pointer relative"
+            onclick="document.getElementById('file_input_1').click()" ondragover="handleDragOver(event)"
+            ondragleave="handleDragLeave()" ondrop="handleDrop(event)">
+            <input type="file" id="file_input_1" accept="image/*" class="hidden" onchange="handleFileSelect(event)">
+            <div id="preview_container_1">
+              <div class="text-gray-300 text-3xl mb-1">📷</div>
+              <p class="text-xs text-gray-400">Нажми или перетащи фото сюда</p>
             </div>
-            <input type="hidden" id="p_img1" value="">
-            <p id="img1_url" class="text-xs text-gray-300 mt-1 truncate"></p>
+            <div id="upload_status_1" class="hidden text-xs text-cyan-600 mt-1"></div>
           </div>
-
-          <!-- Фото 2 -->
-          <div>
-            <p class="text-xs text-gray-400 mb-1">Дополнительное фото</p>
-            <div id="upload_zone_2" class="upload-zone rounded-lg p-4 text-center cursor-pointer relative"
-              onclick="document.getElementById('file_input_2').click()" ondragover="handleDragOver(event, '2')"
-              ondragleave="handleDragLeave('2')" ondrop="handleDrop(event, '2')">
-              <input type="file" id="file_input_2" accept="image/*" class="hidden"
-                onchange="handleFileSelect(event, '2')">
-              <div id="preview_container_2">
-                <div class="text-gray-300 text-3xl mb-1">📷</div>
-                <p class="text-xs text-gray-400">Нажми или перетащи фото</p>
-              </div>
-              <div id="upload_status_2" class="hidden text-xs text-cyan-600 mt-1"></div>
-            </div>
-            <input type="hidden" id="p_img2" value="">
-            <p id="img2_url" class="text-xs text-gray-300 mt-1 truncate"></p>
-          </div>
-
+          <input type="hidden" id="p_img1" value="">
+          <p id="img1_url" class="text-xs text-gray-300 mt-1 truncate"></p>
         </div>
       </div>
 
@@ -171,109 +143,68 @@
       </div>
     </div>
 
-    <!-- Поиск и фильтр -->
-    <div class="flex gap-3 mb-4">
-      <input type="text" id="search_input" placeholder="🔍 Поиск по названию..."
-        class="flex-1 p-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-cyan-400"
+    <div class="mb-4">
+      <input type="text" id="search_input" placeholder="🔍 Быстрый поиск по названию (ищет сразу на всех 4 языках)..."
+        class="w-full p-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-cyan-400"
         oninput="loadPlaces()">
-      <select id="filter_cat"
-        class="p-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:border-cyan-400"
-        onchange="loadPlaces()">
-        <option value="">Все категории</option>
-        <option value="monastery">Монастыри</option>
-        <option value="museum">Музеи</option>
-        <option value="nature">Природа</option>
-        <option value="winery">Винодельни</option>
-        <option value="cave">Пещеры</option>
-        <option value="city">Города</option>
-        <option value="activity">Активности</option>
-      </select>
     </div>
 
-    <!-- Список мест -->
     <div id="places_list" class="space-y-3">
-      <div class="text-center text-gray-400 py-8">Загрузка...</div>
+      <div class="text-center text-gray-400 py-8">Загрузка базы данных...</div>
     </div>
 
   </div>
 
   <script src="app.js"></script>
   <script>
-    const MEDIA_BASE = "https://test.explorearmenia.am/media/";
-
     // ============================================================
-    // Загрузка фото
+    // Загрузка фото (Drag & Drop + клик)
     // ============================================================
-
-    function handleDragOver(e, num) {
+    function handleDragOver(e) { e.preventDefault(); document.getElementById('upload_zone_1').classList.add('dragover'); }
+    function handleDragLeave() { document.getElementById('upload_zone_1').classList.remove('dragover'); }
+    function handleDrop(e) {
       e.preventDefault();
-      document.getElementById(`upload_zone_${num}`).classList.add('dragover');
-    }
-
-    function handleDragLeave(num) {
-      document.getElementById(`upload_zone_${num}`).classList.remove('dragover');
-    }
-
-    function handleDrop(e, num) {
-      e.preventDefault();
-      document.getElementById(`upload_zone_${num}`).classList.remove('dragover');
+      document.getElementById('upload_zone_1').classList.remove('dragover');
       const file = e.dataTransfer.files[0];
-      if (file && file.type.startsWith('image/')) uploadPhoto(file, num);
+      if (file && file.type.startsWith('image/')) uploadPhoto(file);
     }
-
-    function handleFileSelect(e, num) {
+    function handleFileSelect(e) {
       const file = e.target.files[0];
-      if (file) uploadPhoto(file, num);
+      if (file) uploadPhoto(file);
     }
 
-    async function uploadPhoto(file, num) {
-      const status = document.getElementById(`upload_status_${num}`);
-      const preview = document.getElementById(`preview_container_${num}`);
-
-      // Показываем превью сразу локально
+    async function uploadPhoto(file) {
+      const status = document.getElementById('upload_status_1');
+      const preview = document.getElementById('preview_container_1');
       const localUrl = URL.createObjectURL(file);
+
       preview.innerHTML = `<img src="${localUrl}" class="photo-preview">`;
       status.classList.remove('hidden');
-      status.innerHTML = `⏳ Загружаем...`;
+      status.innerHTML = `⏳ Загружаем на сервер...`;
 
       try {
         const formData = new FormData();
         formData.append('file', file);
-
-        // Загружаем напрямую на Бегет через PHP
-        const res = await fetch(
-          `https://test.explorearmenia.am/media/upload.php?key=explorearmenia2026`,
-          { method: 'POST', body: formData }
-        );
-
+        const res = await fetch(`https://test.explorearmenia.am/upload.php?key=explorearmenia2026`, { method: 'POST', body: formData });
         const data = await res.json();
 
         if (data.url) {
-          document.getElementById(`p_img${num}`).value = data.url;
-          document.getElementById(`img${num}_url`).textContent = data.url;
+          document.getElementById('p_img1').value = data.url;
+          document.getElementById('img1_url').textContent = data.url;
           preview.innerHTML = `<img src="${data.url}" class="photo-preview">`;
-          status.innerHTML = `✅ Загружено`;
+          status.innerHTML = `✅ Успешно загружено`;
         } else {
-          throw new Error(data.error || 'Upload failed');
+          throw new Error(data.error || 'Ошибка загрузки');
         }
       } catch (e) {
         status.innerHTML = `❌ Ошибка: ${e.message}`;
-        // Оставляем локальный превью, просим ввести вручную
-        document.getElementById(`p_img${num}`).value = '';
+        document.getElementById('p_img1').value = '';
       }
     }
 
-    function setManualUrl(num, filename) {
-      if (!filename.trim()) return;
-      const url = `${MEDIA_BASE}${filename.trim()}`;
-      document.getElementById(`p_img${num}`).value = url;
-      document.getElementById(`img${num}_url`).textContent = url;
-    }
-
     // ============================================================
-    // Редактирование места — ИСПРАВЛЕНО
+    // Редактирование места (Заполнение всех 4 языков)
     // ============================================================
-
     async function editPlace(id) {
       try {
         const res = await fetch(`${RENDER_API_URL}/places`);
@@ -281,112 +212,90 @@
         const place = data.places.find(p => p.id === id);
         if (!place) { alert('Место не найдено'); return; }
 
-        // Заполняем форму
+        document.getElementById('p_slug').value = place.slug || '';
         document.getElementById('p_name_ru').value = place.name_ru || '';
         document.getElementById('p_name_en').value = place.name_en || '';
-        document.getElementById('p_slug').value = place.slug || '';
-        document.getElementById('p_cat').value = place.category || 'monastery';
-        document.getElementById('p_region').value = place.region || '';
-        document.getElementById('p_promo').value = place.promo_ru || '';
+        document.getElementById('p_name_de').value = place.name_de || '';
+        document.getElementById('p_name_hy').value = place.name_hy || '';
+        document.getElementById('p_desc_ru').value = place.desc_ru || '';
+        document.getElementById('p_desc_en').value = place.desc_en || '';
+        document.getElementById('p_desc_de').value = place.desc_de || '';
+        document.getElementById('p_desc_hy').value = place.desc_hy || '';
+        document.getElementById('p_aliases').value = ''; // Сбрасываем строку псевдонимов
         document.getElementById('editing_id').value = id;
 
-        // Фото
         if (place.photo_main) {
           document.getElementById('p_img1').value = place.photo_main;
           document.getElementById('img1_url').textContent = place.photo_main;
-          document.getElementById('preview_container_1').innerHTML =
-            `<img src="${place.photo_main}" class="photo-preview" onerror="this.src=''">`;
-        }
-        if (place.photo_secondary) {
-          document.getElementById('p_img2').value = place.photo_secondary;
-          document.getElementById('img2_url').textContent = place.photo_secondary;
-          document.getElementById('preview_container_2').innerHTML =
-            `<img src="${place.photo_secondary}" class="photo-preview" onerror="this.src=''">`;
+          document.getElementById('preview_container_1').innerHTML = `<img src="${place.photo_main}" class="photo-preview">`;
+        } else {
+          document.getElementById('p_img1').value = '';
+          document.getElementById('img1_url').textContent = '';
+          document.getElementById('preview_container_1').innerHTML = `<div class="text-gray-300 text-3xl mb-1">📷</div><p class="text-xs text-gray-400">Нажми или перетащи фото сюда</p>`;
         }
 
-        // Меняем заголовок формы
         document.querySelector('#place_form h3').textContent = `✏️ Редактировать: ${place.name_ru}`;
-
-        // Скролл к форме
         document.getElementById('place_form').scrollIntoView({ behavior: 'smooth', block: 'start' });
-
       } catch (e) {
-        alert(`Ошибка: ${e.message}`);
+        alert(`Ошибка получения данных: ${e.message}`);
       }
     }
 
+    // ============================================================
+    // Сброс формы
+    // ============================================================
     function resetForm() {
       document.getElementById('editing_id').value = '';
       document.querySelector('#place_form h3').textContent = 'Добавить новое место';
-      ['p_name_ru', 'p_name_en', 'p_slug', 'p_region', 'p_promo', 'p_aliases'].forEach(id => {
+      ['p_slug', 'p_name_ru', 'p_name_en', 'p_name_de', 'p_name_hy', 'p_desc_ru', 'p_desc_en', 'p_desc_de', 'p_desc_hy', 'p_aliases'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = '';
       });
       document.getElementById('p_img1').value = '';
-      document.getElementById('p_img2').value = '';
       document.getElementById('img1_url').textContent = '';
-      document.getElementById('img2_url').textContent = '';
-      document.getElementById('preview_container_1').innerHTML = `<div class="text-gray-300 text-3xl mb-1">📷</div><p class="text-xs text-gray-400">Нажми или перетащи фото</p>`;
-      document.getElementById('preview_container_2').innerHTML = `<div class="text-gray-300 text-3xl mb-1">📷</div><p class="text-xs text-gray-400">Нажми или перетащи фото</p>`;
-      // Убираем поля ввода вручную если есть
-      ['1', '2'].forEach(n => {
-        const manual = document.getElementById(`manual_name_${n}`);
-        if (manual) manual.parentElement.remove();
-      });
+      document.getElementById('preview_container_1').innerHTML = `<div class="text-gray-300 text-3xl mb-1">📷</div><p class="text-xs text-gray-400">Нажми или перетащи фото сюда</p>`;
+      document.getElementById('upload_status_1').innerHTML = '';
     }
 
     // ============================================================
-    // Рендер списка мест — обновлённый
+    // Отрисовка списка мест
     // ============================================================
-
     function renderPlacesList(places) {
       const container = document.getElementById('places_list');
       if (!container) return;
-
       if (places.length === 0) {
-        container.innerHTML = '<p class="text-gray-400 text-center py-8">Мест не найдено</p>';
+        container.innerHTML = '<p class="text-gray-400 text-center py-8">В базе пока нет мест</p>';
         return;
       }
 
-      const catColors = {
-        monastery: 'bg-purple-100 text-purple-700',
-        museum: 'bg-blue-100 text-blue-700',
-        nature: 'bg-green-100 text-green-700',
-        winery: 'bg-red-100 text-red-700',
-        cave: 'bg-yellow-100 text-yellow-700',
-        city: 'bg-cyan-100 text-cyan-700',
-        activity: 'bg-orange-100 text-orange-700',
-      };
-
       container.innerHTML = places.map(p => `
-    <div class="bg-white border border-gray-100 rounded-xl p-4 flex items-start gap-4 hover:shadow-sm transition">
-      <div class="flex-shrink-0 w-20 h-16 rounded-lg overflow-hidden bg-gray-100">
-        ${p.photo_main
+        <div class="bg-white border border-gray-100 rounded-xl p-4 flex items-start gap-4 hover:shadow-sm transition">
+          <div class="flex-shrink-0 w-20 h-16 rounded-lg overflow-hidden bg-gray-100">
+            ${p.photo_main
           ? `<img src="${p.photo_main}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<div class=\\'flex items-center justify-center h-full text-gray-300 text-xs\\'>нет фото</div>'">`
           : `<div class="flex items-center justify-center h-full text-gray-300 text-xs">нет фото</div>`}
-      </div>
-      <div class="flex-1 min-w-0">
-        <div class="flex justify-between items-start gap-2">
-          <div>
-            <span class="font-semibold text-gray-800">${p.name_ru || '—'}</span>
-            ${p.name_en ? `<span class="text-gray-400 text-xs ml-2">${p.name_en}</span>` : ''}
-            ${p.region ? `<span class="text-gray-300 text-xs ml-2">• ${p.region}</span>` : ''}
           </div>
-          <span class="text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${catColors[p.category] || 'bg-gray-100 text-gray-600'}">${p.category}</span>
+          <div class="flex-1 min-w-0">
+            <div class="flex justify-between items-start gap-2">
+              <div>
+                <span class="font-semibold text-gray-800">${p.name_ru || '—'}</span>
+                ${p.name_en ? `<span class="text-gray-400 text-xs ml-2">EN: ${p.name_en}</span>` : ''}
+                ${p.name_de ? `<span class="text-gray-400 text-xs ml-2">DE: ${p.name_de}</span>` : ''}
+                ${p.name_hy ? `<span class="text-gray-400 text-xs ml-2">HY: ${p.name_hy}</span>` : ''}
+              </div>
+              <span class="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-500 font-mono">${p.slug}</span>
+            </div>
+            <p class="text-sm text-gray-500 mt-1 line-clamp-2">${p.desc_ru || 'Нет описания на русском языке'}</p>
+            <div class="flex gap-3 mt-2">
+              <button onclick="editPlace(${p.id})" class="text-xs text-cyan-600 hover:text-cyan-700 font-medium hover:underline">✏️ Редактировать</button>
+              <button onclick="deletePlace(${p.id})" class="text-xs text-red-400 hover:text-red-600 font-medium hover:underline">🗑 Удалить</button>
+            </div>
+          </div>
         </div>
-        <p class="text-sm text-gray-500 mt-1 line-clamp-2">${p.promo_ru || p.desc_ru || 'Нет описания'}</p>
-        <div class="flex gap-3 mt-2">
-          <button onclick="editPlace(${p.id})"
-            class="text-xs text-cyan-600 hover:text-cyan-700 font-medium hover:underline">✏️ Редактировать</button>
-          <button onclick="deletePlace(${p.id})"
-            class="text-xs text-red-400 hover:text-red-600 font-medium hover:underline">🗑 Удалить</button>
-        </div>
-      </div>
-    </div>
-  `).join('');
+      `).join('');
     }
 
-    // Загружаем места при старте
+    // Загрузка данных при старте страницы
     loadPlaces();
   </script>
 </body>
