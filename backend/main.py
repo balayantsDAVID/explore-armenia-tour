@@ -264,3 +264,25 @@ def delete_place(place_id: int):
     finally:
         cursor.close()
         conn.close()
+
+@app.get("/analytics/generations")
+def get_generations_analytics():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Группируем логи генераций по датам
+        cursor.execute("""
+            SELECT DATE(created_at) as date, COUNT(*) as count 
+            FROM tour_logs 
+            GROUP BY DATE(created_at) 
+            ORDER BY date ASC
+        """)
+        data = cursor.fetchall()
+        # Преобразуем дату в строку для JSON
+        formatted_data = [{"date": str(row['date']), "count": row['count']} for row in data]
+        return {"analytics": formatted_data}
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        cursor.close()
+        conn.close()
