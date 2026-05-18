@@ -234,15 +234,24 @@ def update_place(place_id: int, place: PlaceCreate):
             UPDATE places SET name_ru=%s, name_en=%s, name_hy=%s, category=%s, region=%s,
                 desc_ru=%s, desc_en=%s, promo_ru=%s, promo_en=%s, photo_main=%s, photo_secondary=%s
             WHERE id=%s
-        """, (place.name_ru, place.name_en, place.name_hy, place.category, place.region,
-              place.desc_ru, place.desc_en, place.promo_ru, place.promo_en,
-              place.photo_main, place.photo_secondary, place_id))
+        """, (
+            place.name_ru, place.name_en, place.name_hy, place.category, place.region,
+            place.desc_ru, place.desc_en, place.promo_ru, place.promo_en,
+            place.photo_main, place.photo_secondary, place_id
+        ))
+        conn.commit()
         cursor.execute("DELETE FROM place_aliases WHERE place_id = %s", (place_id,))
         for alias in place.aliases:
             if alias.strip():
-                cursor.execute("INSERT INTO place_aliases (place_id, alias_name) VALUES (%s, %s)",
-                               (place_id, alias.strip()))
+                cursor.execute(
+                    "INSERT INTO place_aliases (place_id, alias_name) VALUES (%s, %s)",
+                    (place_id, alias.strip())
+                )
+        conn.commit()
         return {"status": "updated"}
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=500, detail=traceback.format_exc())
     finally:
         cursor.close()
         conn.close()
