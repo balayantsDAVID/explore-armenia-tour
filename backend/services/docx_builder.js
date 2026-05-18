@@ -1,24 +1,13 @@
 // ============================================================
-// ExploreArmenia — Сборка Word документа
-// ============================================================
-// Использует библиотеку 'docx' (Node.js)
-// Запускается из Python через subprocess
-// 
-// Входные данные: JSON файл с днями и мета-данными тура
-// Выходной файл: tour_XXXXXX.docx
-//
-// Структура документа:
-// - Хедер: логотип + "ПРОГРАММА ТУРА ПО АРМЕНИИ" (на каждой странице)
-// - Страница 1: данные тура (даты, рейсы, отель, контакт)
-// - Страницы 2+: каждый день = фото слева + текст справа
-// - Футер: "Армения - страна, в которую можно влюбиться!" (на каждой странице)
+// ExploreArmenia — DOCX Builder v2
+// Воспроизводит точный макет оригинального документа
 // ============================================================
 
 const {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
   ImageRun, Header, Footer, AlignmentType, BorderStyle, WidthType,
   ShadingType, VerticalAlign, PageNumber, PageBreak, LevelFormat,
-  HeadingLevel
+  UnderlineType
 } = require('docx');
 
 const fs = require('fs');
@@ -27,449 +16,440 @@ const https = require('https');
 const http = require('http');
 
 // ============================================================
-// Цвета бренда ExploreArmenia (из макета)
+// Константы — точно по оригиналу
 // ============================================================
 const COLORS = {
-  blue: "00AACC",       // голубой — хедер, заголовки дней
-  red: "CC0000",        // красный — слоган в футере
-  white: "FFFFFF",
-  black: "000000",
-  gray: "666666",
-  lightBlue: "E8F7FC",  // светло-голубой фон для блоков
+  blue:      "00AACC",  // голубой хедер
+  red:       "CC0000",  // красный слоган
+  darkBlue:  "003366",  // тёмно-синий заголовок дня
+  cyan:      "009DC4",  // заголовок дня (подзаголовок)
+  white:     "FFFFFF",
+  black:     "000000",
+  gray:      "555555",
+  lightGray: "888888",
 };
 
-// A4 страница в DXA (1440 DXA = 1 дюйм = 2.54 см)
-// A4: 210мм × 297мм = 11906 × 16838 DXA
-// Поля: 1.5см = ~851 DXA
-const PAGE = {
-  width: 11906,
-  height: 16838,
-  marginTop: 851,
-  marginBottom: 851,
-  marginLeft: 851,
-  marginRight: 851,
-};
+// A4 в DXA
+const PAGE_W = 11906;
+const PAGE_H = 16838;
+const MARGIN  = 851;  // ~1.5cm
+const CONTENT_W = PAGE_W - MARGIN * 2; // 10204
 
-// Ширина контента = страница - левое поле - правое поле
-const CONTENT_WIDTH = PAGE.width - PAGE.marginLeft - PAGE.marginRight; // ~10204 DXA
-
-// Ширина колонок для макета "фото | текст"
-const COL_PHOTO = Math.round(CONTENT_WIDTH * 0.35);   // 35% — фото
-const COL_TEXT  = Math.round(CONTENT_WIDTH * 0.65);   // 65% — текст
-
+// Колонки для блока дня: фото 38%, текст 62%
+const COL_PHOTO = Math.round(CONTENT_W * 0.38); // 3877
+const COL_TEXT  = CONTENT_W - COL_PHOTO;         // 6327
 
 // ============================================================
-// Скачивание фото по URL во временный файл
+// Скачивание изображения
 // ============================================================
 async function downloadImage(url, destPath) {
-  if (!url || url.trim() === '') return null;
-
+  if (!url || !url.trim()) return null;
   return new Promise((resolve) => {
     const protocol = url.startsWith('https') ? https : http;
-
-    const options = {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; ExploreArmenia/1.0)'
-      }
-    };
-
-    const req = protocol.get(url, options, (response) => {
-      // Обрабатываем редиректы
-      if (response.statusCode === 301 || response.statusCode === 302) {
-        downloadImage(response.headers.location, destPath).then(resolve);
+    const req = protocol.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 ExploreArmenia/2.0' }
+    }, (res) => {
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        downloadImage(res.headers.location, destPath).then(resolve);
         return;
       }
-      if (response.statusCode !== 200) {
-        resolve(null);
-        return;
-      }
+      if (res.statusCode !== 200) { resolve(null); return; }
       const file = fs.createWriteStream(destPath);
-      response.pipe(file);
+      res.pipe(file);
       file.on('finish', () => { file.close(); resolve(destPath); });
       file.on('error', () => resolve(null));
     });
-
     req.on('error', () => resolve(null));
-    req.setTimeout(10000, () => { req.destroy(); resolve(null); });
+    req.setTimeout(12000, () => { req.destroy(); resolve(null); });
   });
 }
 
+// Определяем тип изображения по расширению
+function getImageType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.png') return 'png';
+  if (ext === '.gif') return 'gif';
+  return 'jpg';
+}
 
 // ============================================================
-// Создание хедера (повторяется на каждой странице)
+// ХЕДЕР — голубая плашка с логотипом и заголовком
 // ============================================================
 function createHeader(logoPath) {
-  const headerChildren = [];
-  
-  // Таблица 1×2: логотип | заголовок
-  const headerTable = new Table({
-    width: { size: CONTENT_WIDTH, type: WidthType.DXA },
-    columnWidths: [2000, CONTENT_WIDTH - 2000],
-    borders: {
-      top: { style: BorderStyle.NONE },
-      bottom: { style: BorderStyle.NONE },
-      left: { style: BorderStyle.NONE },
-      right: { style: BorderStyle.NONE },
-      insideH: { style: BorderStyle.NONE },
-      insideV: { style: BorderStyle.NONE },
-    },
-    rows: [
-      new TableRow({
-        children: [
-          // Левая ячейка: логотип
-          new TableCell({
-            width: { size: 2000, type: WidthType.DXA },
-            shading: { fill: COLORS.blue, type: ShadingType.CLEAR },
-            verticalAlign: VerticalAlign.CENTER,
-            margins: { top: 100, bottom: 100, left: 100, right: 100 },
+  const noBorder = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+  const noBorders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder, insideH: noBorder, insideV: noBorder };
+
+  // Левая ячейка — логотип или текст EXPLORE
+  const logoCell = new TableCell({
+    width: { size: 2200, type: WidthType.DXA },
+    shading: { fill: COLORS.blue, type: ShadingType.CLEAR },
+    verticalAlign: VerticalAlign.CENTER,
+    borders: noBorders,
+    margins: { top: 80, bottom: 80, left: 150, right: 80 },
+    children: [
+      logoPath && fs.existsSync(logoPath)
+        ? new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 0, after: 0 },
+            children: [new ImageRun({
+              type: 'png',
+              data: fs.readFileSync(logoPath),
+              transformation: { width: 95, height: 68 },
+              altText: { title: 'Logo', description: 'ExploreArmenia', name: 'logo' }
+            })]
+          })
+        : new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 0, after: 0 },
             children: [
-              logoPath && fs.existsSync(logoPath)
-                ? new Paragraph({
-                    alignment: AlignmentType.CENTER,
-                    children: [new ImageRun({
-                      type: "png",
-                      data: fs.readFileSync(logoPath),
-                      transformation: { width: 100, height: 60 },
-                      altText: { title: "Logo", description: "ExploreArmenia", name: "logo" }
-                    })]
-                  })
-                : new Paragraph({
-                    alignment: AlignmentType.CENTER,
-                    children: [new TextRun({
-                      text: "EXPLORE\narmenia.am",
-                      color: COLORS.white,
-                      bold: true,
-                      size: 18
-                    })]
-                  })
-            ]
-          }),
-          // Правая ячейка: заголовок тура
-          new TableCell({
-            width: { size: CONTENT_WIDTH - 2000, type: WidthType.DXA },
-            shading: { fill: COLORS.blue, type: ShadingType.CLEAR },
-            verticalAlign: VerticalAlign.CENTER,
-            margins: { top: 100, bottom: 100, left: 200, right: 100 },
-            children: [
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                children: [new TextRun({
-                  text: "ПРОГРАММА ТУРА ПО АРМЕНИИ",
-                  color: COLORS.white,
-                  bold: true,
-                  size: 32,
-                  font: "Arial"
-                })]
-              })
+              new TextRun({ text: "EXPLORE", color: COLORS.white, bold: true, size: 22, font: "Arial", break: 0 }),
+              new TextRun({ text: "armenia.am", color: COLORS.white, size: 16, font: "Arial", break: 1 }),
             ]
           })
-        ]
+    ]
+  });
+
+  // Правая ячейка — заголовок
+  const titleCell = new TableCell({
+    width: { size: CONTENT_W - 2200, type: WidthType.DXA },
+    shading: { fill: COLORS.blue, type: ShadingType.CLEAR },
+    verticalAlign: VerticalAlign.CENTER,
+    borders: noBorders,
+    margins: { top: 80, bottom: 80, left: 200, right: 150 },
+    children: [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 0 },
+        children: [new TextRun({
+          text: "ПРОГРАММА ТУРА ПО АРМЕНИИ",
+          color: COLORS.white,
+          bold: true,
+          size: 36,
+          font: "Arial",
+        })]
       })
     ]
   });
-  
-  headerChildren.push(headerTable);
-  
-  return new Header({ children: headerChildren });
+
+  const headerTable = new Table({
+    width: { size: CONTENT_W, type: WidthType.DXA },
+    columnWidths: [2200, CONTENT_W - 2200],
+    borders: { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder, insideH: noBorder, insideV: noBorder },
+    rows: [new TableRow({ children: [logoCell, titleCell] })]
+  });
+
+  return new Header({ children: [headerTable] });
 }
 
-
 // ============================================================
-// Создание футера (повторяется на каждой странице)
+// ФУТЕР — красный слоган + контакты
 // ============================================================
 function createFooter() {
   return new Footer({
     children: [
       // Разделительная линия
       new Paragraph({
-        border: { top: { style: BorderStyle.SINGLE, size: 4, color: COLORS.blue } },
+        spacing: { before: 0, after: 60 },
+        border: { top: { style: BorderStyle.SINGLE, size: 6, color: COLORS.blue } },
         children: []
       }),
-      // Слоган — красным
+      // Слоган красным жирным
       new Paragraph({
         alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 40 },
         children: [new TextRun({
           text: "Армения - страна, в которую можно влюбиться!",
           color: COLORS.red,
           bold: true,
           size: 22,
-          font: "Arial"
+          font: "Arial",
         })]
       }),
-      // Контакты + номер страницы
+      // Контакты серым мелким + номер страницы
       new Paragraph({
         alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 0 },
         children: [
-          new TextRun({
-            text: "(+374 91) 01 56 60 (Viber, WhatsApp)  |  info@explorearmenia.am  |  www.explorearmenia.am  |  стр. ",
-            color: COLORS.gray,
-            size: 16,
-            font: "Arial"
-          }),
-          new TextRun({
-            children: [PageNumber.CURRENT],
-            color: COLORS.gray,
-            size: 16
-          })
+          new TextRun({ text: "(+374 91) 01 56 60 (Viber, WhatsApp)  |  info@explorearmenia.am  |  www.explorearmenia.am  |  стр. ", color: COLORS.lightGray, size: 15, font: "Arial" }),
+          new TextRun({ children: [PageNumber.CURRENT], color: COLORS.lightGray, size: 15 })
         ]
       })
     ]
   });
 }
 
+// ============================================================
+// СТРАНИЦА 1 — данные тура
+// ============================================================
+function buildTourInfoPage(meta) {
+  const items = [];
 
-// ============================================================
-// Первая страница: данные тура
-// ============================================================
-function createTourInfoPage(meta) {
-  const fields = [
-    { label: "Дата начала тура:",     value: meta.start },
-    { label: "Дата окончания тура:",  value: meta.end },
-    { label: "Рейс прилета:",         value: meta.flight_in },
-    { label: "Рейс вылета:",          value: meta.flight_out },
-    { label: "Количество участников:", value: meta.guests },
-    { label: "Отель:",                value: meta.hotel },
-    { label: "Контактное лицо:",      value: meta.contact },
-  ];
-  
-  const paragraphs = [];
-  
-  // Отступ сверху
-  paragraphs.push(new Paragraph({ children: [new TextRun({ text: "" })] }));
-  
-  for (const field of fields) {
-    paragraphs.push(
-      new Paragraph({
-        spacing: { after: 160 },
-        children: [
-          new TextRun({ text: `${field.label} `, bold: true, size: 24, font: "Arial" }),
-          new TextRun({ text: field.value || "—", size: 24, font: "Arial" })
-        ]
-      })
-    );
-  }
-  
-  return paragraphs;
+  // Пустая строка сверху
+  items.push(new Paragraph({ spacing: { before: 200, after: 100 }, children: [] }));
+
+  // Даты
+  items.push(new Paragraph({
+    spacing: { before: 60, after: 60 },
+    children: [
+      new TextRun({ text: "Дата начала тура: ", bold: true, size: 24, font: "Arial" }),
+      new TextRun({ text: meta.start || "—", size: 24, font: "Arial" }),
+    ]
+  }));
+  items.push(new Paragraph({
+    spacing: { before: 60, after: 160 },
+    children: [
+      new TextRun({ text: "Дата окончания тура: ", bold: true, size: 24, font: "Arial" }),
+      new TextRun({ text: meta.end || "—", size: 24, font: "Arial" }),
+    ]
+  }));
+
+  // Рейсы
+  items.push(new Paragraph({
+    spacing: { before: 60, after: 60 },
+    children: [
+      new TextRun({ text: "Рейс прилета: ", bold: true, size: 24, font: "Arial" }),
+      new TextRun({ text: meta.flight_in || "—", size: 24, font: "Arial" }),
+    ]
+  }));
+  items.push(new Paragraph({
+    spacing: { before: 60, after: 60 },
+    children: [
+      new TextRun({ text: "Рейс вылета: ", bold: true, size: 24, font: "Arial" }),
+      new TextRun({ text: meta.flight_out || "—", size: 24, font: "Arial" }),
+    ]
+  }));
+  items.push(new Paragraph({
+    spacing: { before: 60, after: 160 },
+    children: [
+      new TextRun({ text: "Количество участников: ", bold: true, size: 24, font: "Arial" }),
+      new TextRun({ text: meta.guests || "—", size: 24, font: "Arial" }),
+    ]
+  }));
+
+  // Отель
+  items.push(new Paragraph({
+    spacing: { before: 60, after: 160 },
+    children: [
+      new TextRun({ text: "Отель: ", bold: true, size: 24, font: "Arial" }),
+      new TextRun({ text: meta.hotel || "—", size: 24, font: "Arial", color: COLORS.red }),
+    ]
+  }));
+
+  // Контакт
+  items.push(new Paragraph({
+    spacing: { before: 60, after: 60 },
+    children: [
+      new TextRun({ text: "Контактное лицо: ", bold: true, size: 24, font: "Arial" }),
+      new TextRun({ text: meta.contact || "—", size: 24, font: "Arial" }),
+    ]
+  }));
+
+  return items;
 }
 
-
 // ============================================================
-// Блок одного дня: фото слева + текст справа
+// БЛОК ДНЯ — фото слева, текст справа (точно по оригиналу)
 // ============================================================
-async function createDayBlock(day, tempDir) {
+async function buildDayBlock(day, tempDir) {
   const elements = [];
-  
-  // Собираем фото для этого дня
+  const noBorder = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+  const noBorders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder, insideH: noBorder, insideV: noBorder };
+
+  // Собираем фото для дня (максимум 2)
   const photos = [];
-  for (const place of day.places) {
-    if (place.photo_main && place.photo_main.trim()) {
-      const imgPath = path.join(tempDir, `img_${place.id || Math.random()}_1.jpg`);
-      const downloaded = await downloadImage(place.photo_main, imgPath);
-      if (downloaded) photos.push(downloaded);
-    }
-    if (place.photo_secondary && place.photo_secondary.trim() && photos.length < 2) {
-      const imgPath = path.join(tempDir, `img_${place.id || Math.random()}_2.jpg`);
-      const downloaded = await downloadImage(place.photo_secondary, imgPath);
-      if (downloaded) photos.push(downloaded);
-    }
+  for (const place of day.places || []) {
     if (photos.length >= 2) break;
-  }
-  
-  // Левая колонка: фото (1 или 2 штуки)
-  const photoCell_children = [];
-  
-  if (photos.length > 0) {
-    for (const photoPath of photos.slice(0, 2)) {
-      photoCell_children.push(
-        new Paragraph({
-          spacing: { after: 100 },
-          children: [new ImageRun({
-            type: "jpg",
-            data: fs.readFileSync(photoPath),
-            transformation: { width: 180, height: 130 },
-            altText: { title: "Photo", description: "Place photo", name: "photo" }
-          })]
-        })
-      );
+    for (const photoUrl of [place.photo_main, place.photo_secondary]) {
+      if (!photoUrl || !photoUrl.trim() || photos.length >= 2) continue;
+      const fname = `photo_${day.day_number}_${photos.length}_${Date.now()}.jpg`;
+      const fpath = path.join(tempDir, fname);
+      const downloaded = await downloadImage(photoUrl, fpath);
+      if (downloaded) photos.push(downloaded);
     }
-  } else {
-    // Нет фото — серый плейсхолдер
-    photoCell_children.push(
-      new Paragraph({
-        children: [new TextRun({ text: "[ фото ]", color: COLORS.gray, size: 20 })]
-      })
-    );
   }
-  
-  // Правая колонка: заголовок дня + список мест
-  const textCell_children = [];
-  
-  // Заголовок: "День 1 (07.05, четверг)"
-  textCell_children.push(
-    new Paragraph({
+
+  // --- ЛЕВАЯ КОЛОНКА: фото ---
+  const photoCellChildren = [];
+  if (photos.length > 0) {
+    for (const photoPath of photos) {
+      try {
+        const imgData = fs.readFileSync(photoPath);
+        const imgType = getImageType(photoPath);
+        photoCellChildren.push(new Paragraph({
+          spacing: { before: 0, after: 80 },
+          children: [new ImageRun({
+            type: imgType,
+            data: imgData,
+            transformation: { width: 195, height: 145 },
+            altText: { title: 'Photo', description: 'Place', name: 'photo' }
+          })]
+        }));
+      } catch(e) {
+        console.log(`Photo error: ${e.message}`);
+      }
+    }
+  }
+  if (photoCellChildren.length === 0) {
+    photoCellChildren.push(new Paragraph({
+      spacing: { before: 0, after: 0 },
+      children: [new TextRun({ text: " ", size: 22 })]
+    }));
+  }
+
+  // --- ПРАВАЯ КОЛОНКА: текст ---
+  const textCellChildren = [];
+
+  // Заголовок дня — "День 1 (07.05, четверг)" синим
+  textCellChildren.push(new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 60, after: 80 },
+    children: [new TextRun({
+      text: day.day_label || `День ${day.day_number}`,
+      color: COLORS.darkBlue,
+      bold: false,
+      size: 26,
+      font: "Arial",
+    })]
+  }));
+
+  // Названия мест через " - " жирным синим (подзаголовок дня)
+  const foundPlaces = (day.places || []).filter(p => p.status === 'OK');
+  if (foundPlaces.length > 0) {
+    const subtitle = foundPlaces.map(p => p.name || p.query).join(' - ');
+    textCellChildren.push(new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { before: 80, after: 100 },
+      spacing: { before: 0, after: 120 },
+      border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: COLORS.cyan } },
       children: [new TextRun({
-        text: day.day_label,
-        color: COLORS.blue,
+        text: subtitle,
+        color: COLORS.cyan,
         bold: true,
         size: 26,
-        font: "Arial"
+        font: "Arial",
       })]
-    })
-  );
-  
-  // Подзаголовок: названия мест через " – "
-  const foundPlaces = day.places.filter(p => p.status === "OK");
-  if (foundPlaces.length > 0) {
-    const dayTitle = foundPlaces.map(p => p.name || p.query).join(" – ");
-    textCell_children.push(
-      new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { after: 160 },
-        children: [new TextRun({
-          text: dayTitle,
-          bold: true,
-          size: 24,
-          font: "Arial",
-          color: COLORS.black
-        })]
-      })
-    );
+    }));
   }
-  
-  // Описания мест (буллеты)
-  for (const place of day.places) {
-    const text = place.final_text || place.description || "";
+
+  // Описания мест в виде буллетов
+  for (const place of day.places || []) {
+    const text = place.final_text || place.promo_text || place.description || '';
     if (!text.trim()) continue;
-    
-    textCell_children.push(
-      new Paragraph({
-        spacing: { after: 100 },
-        bullet: { level: 0 },
-        children: [
-          // Название места жирным
-          new TextRun({
-            text: `${place.name || place.query}: `,
-            bold: true,
-            size: 20,
-            font: "Arial"
-          }),
-          // Описание обычным
-          new TextRun({
-            text: text,
-            size: 20,
-            font: "Arial"
-          }),
-          // Предупреждение если место не в БД
-          ...(place.warning ? [new TextRun({
-            text: ` ${place.warning}`,
-            color: "FF6600",
-            size: 18,
-            italics: true
-          })] : [])
-        ]
-      })
-    );
+
+    textCellChildren.push(new Paragraph({
+      spacing: { before: 60, after: 60 },
+      numbering: { reference: "bullets", level: 0 },
+      children: [
+        new TextRun({
+          text: text,
+          size: 20,
+          font: "Arial",
+          color: COLORS.black,
+        })
+      ]
+    }));
   }
-  
-  // Таблица: 1 строка, 2 колонки
+
+  if (textCellChildren.length === 1) {
+    // Только заголовок дня — пустой день (прилёт, трансфер)
+    textCellChildren.push(new Paragraph({
+      children: [new TextRun({ text: " ", size: 20 })]
+    }));
+  }
+
+  // Таблица 2 колонки
   const dayTable = new Table({
-    width: { size: CONTENT_WIDTH, type: WidthType.DXA },
+    width: { size: CONTENT_W, type: WidthType.DXA },
     columnWidths: [COL_PHOTO, COL_TEXT],
-    borders: {
-      top: { style: BorderStyle.NONE },
-      bottom: { style: BorderStyle.NONE },
-      left: { style: BorderStyle.NONE },
-      right: { style: BorderStyle.NONE },
-      insideH: { style: BorderStyle.NONE },
-      insideV: { style: BorderStyle.NONE },
-    },
+    borders: { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder, insideH: noBorder, insideV: noBorder },
     rows: [
       new TableRow({
         children: [
+          // Левая: фото
           new TableCell({
             width: { size: COL_PHOTO, type: WidthType.DXA },
             verticalAlign: VerticalAlign.TOP,
-            margins: { top: 80, bottom: 80, left: 0, right: 120 },
-            children: photoCell_children
+            borders: noBorders,
+            margins: { top: 80, bottom: 80, left: 0, right: 160 },
+            children: photoCellChildren
           }),
+          // Правая: текст
           new TableCell({
             width: { size: COL_TEXT, type: WidthType.DXA },
             verticalAlign: VerticalAlign.TOP,
-            margins: { top: 80, bottom: 80, left: 120, right: 0 },
-            children: textCell_children
+            borders: noBorders,
+            margins: { top: 80, bottom: 80, left: 0, right: 0 },
+            children: textCellChildren
           })
         ]
       })
     ]
   });
-  
+
   elements.push(dayTable);
-  
+
   // Разделитель между днями
-  elements.push(
-    new Paragraph({
-      border: { bottom: { style: BorderStyle.SINGLE, size: 2, color: "DDDDDD" } },
-      spacing: { before: 160, after: 160 },
-      children: []
-    })
-  );
-  
+  elements.push(new Paragraph({
+    spacing: { before: 100, after: 100 },
+    border: { bottom: { style: BorderStyle.SINGLE, size: 2, color: "DDDDDD" } },
+    children: []
+  }));
+
   return elements;
 }
 
+// ============================================================
+// БЛОК "СТОИМОСТЬ ВКЛЮЧАЕТ / НЕ ВКЛЮЧАЕТ"
+// ============================================================
+function buildCostBlock() {
+  return [
+    new Paragraph({ spacing: { before: 200, after: 80 }, children: [
+      new TextRun({ text: "Стоимость тура включает:", bold: true, size: 22, color: COLORS.cyan, font: "Arial" })
+    ]}),
+    ...["трансферы аэропорт-отель-аэропорт",
+        "комфортабельное транспортное обслуживание",
+        "услуги сопровождающего гида",
+        "входные билеты в историко-культурные центры",
+        "бутилированная вода в транспорте",
+        "круглосуточная поддержка туристов по телефону"
+    ].map(t => new Paragraph({
+      spacing: { before: 40, after: 40 },
+      numbering: { reference: "bullets", level: 0 },
+      children: [new TextRun({ text: t, size: 20, font: "Arial" })]
+    })),
+
+    new Paragraph({ spacing: { before: 160, after: 80 }, children: [
+      new TextRun({ text: "Стоимость тура не включает:", bold: true, size: 22, color: COLORS.red, font: "Arial" })
+    ]}),
+    ...["авиабилеты", "медицинская страховка"].map(t => new Paragraph({
+      spacing: { before: 40, after: 40 },
+      numbering: { reference: "bullets", level: 0 },
+      children: [new TextRun({ text: t, size: 20, font: "Arial" })]
+    })),
+  ];
+}
 
 // ============================================================
-// Главная функция: собирает весь документ
+// ГЛАВНАЯ ФУНКЦИЯ
 // ============================================================
 async function buildDocument(inputJsonPath, outputDocxPath) {
-  
-  // Читаем данные
-  const data = JSON.parse(fs.readFileSync(inputJsonPath, 'utf8'));
-  const { days, meta } = data;
-  
+  const raw = JSON.parse(fs.readFileSync(inputJsonPath, 'utf8'));
+  const { days, meta } = raw;
   const tempDir = path.dirname(outputDocxPath);
   const logoPath = path.join(__dirname, '..', 'assets', 'logo.png');
-  
-  // Собираем все блоки документа
-  const allContent = [];
-  
-  // 1. Данные тура (первая страница)
-  const tourInfoParagraphs = createTourInfoPage(meta);
-  allContent.push(...tourInfoParagraphs);
-  
-  // 2. Разрыв страницы перед первым днём
-  allContent.push(new Paragraph({ children: [new PageBreak()] }));
-  
-  // 3. Блоки дней
+
+  // Страница 1: данные тура
+  const page1 = buildTourInfoPage(meta);
+
+  // Блоки дней
+  const dayBlocks = [];
   for (const day of days) {
-    const dayElements = await createDayBlock(day, tempDir);
-    allContent.push(...dayElements);
+    const block = await buildDayBlock(day, tempDir);
+    dayBlocks.push(...block);
   }
-  
-  // 4. Блок "Стоимость включает / не включает"
-  allContent.push(
-    new Paragraph({
-      spacing: { before: 300, after: 100 },
-      children: [new TextRun({ text: "Стоимость тура включает:", bold: true, size: 22, color: COLORS.blue })]
-    }),
-    new Paragraph({ bullet: { level: 0 }, children: [new TextRun({ text: "трансферы аэропорт-отель-аэропорт", size: 20 })] }),
-    new Paragraph({ bullet: { level: 0 }, children: [new TextRun({ text: "комфортабельное транспортное обслуживание", size: 20 })] }),
-    new Paragraph({ bullet: { level: 0 }, children: [new TextRun({ text: "услуги сопровождающего гида", size: 20 })] }),
-    new Paragraph({ bullet: { level: 0 }, children: [new TextRun({ text: "входные билеты в историко-культурные центры", size: 20 })] }),
-    new Paragraph({ bullet: { level: 0 }, children: [new TextRun({ text: "бутилированная вода в транспорте", size: 20 })] }),
-    new Paragraph({ bullet: { level: 0 }, children: [new TextRun({ text: "круглосуточная поддержка туристов по телефону", size: 20 })] }),
-    
-    new Paragraph({
-      spacing: { before: 200, after: 100 },
-      children: [new TextRun({ text: "Стоимость тура не включает:", bold: true, size: 22, color: COLORS.red })]
-    }),
-    new Paragraph({ bullet: { level: 0 }, children: [new TextRun({ text: "авиабилеты", size: 20 })] }),
-    new Paragraph({ bullet: { level: 0 }, children: [new TextRun({ text: "медицинская страховка", size: 20 })] }),
-  );
-  
-  // Создаём документ
+
+  // Блок стоимости
+  const costBlock = buildCostBlock();
+
   const doc = new Document({
     numbering: {
       config: [{
@@ -479,41 +459,39 @@ async function buildDocument(inputJsonPath, outputDocxPath) {
           format: LevelFormat.BULLET,
           text: "•",
           alignment: AlignmentType.LEFT,
-          style: {
-            paragraph: { indent: { left: 360, hanging: 260 } }
-          }
+          style: { paragraph: { indent: { left: 440, hanging: 260 } } }
         }]
       }]
+    },
+    styles: {
+      default: {
+        document: { run: { font: "Arial", size: 22 } }
+      }
     },
     sections: [{
       properties: {
         page: {
-          size: { width: PAGE.width, height: PAGE.height },
-          margin: {
-            top: PAGE.marginTop,
-            bottom: PAGE.marginBottom,
-            left: PAGE.marginLeft,
-            right: PAGE.marginRight,
-            header: 400,
-            footer: 400
-          }
+          size: { width: PAGE_W, height: PAGE_H },
+          margin: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN, header: 300, footer: 400 }
         }
       },
       headers: { default: createHeader(logoPath) },
       footers: { default: createFooter() },
-      children: allContent
+      children: [
+        ...page1,
+        new Paragraph({ children: [new PageBreak()] }),
+        ...dayBlocks,
+        ...costBlock,
+      ]
     }]
   });
-  
-  // Записываем файл
+
   const buffer = await Packer.toBuffer(doc);
   fs.writeFileSync(outputDocxPath, buffer);
   console.log(`✅ DOCX создан: ${outputDocxPath}`);
 }
 
-
-// Запуск из командной строки:
-// node docx_builder.js /tmp/input.json /tmp/output.docx
+// CLI запуск
 const [,, inputPath, outputPath] = process.argv;
 if (!inputPath || !outputPath) {
   console.error("Использование: node docx_builder.js <input.json> <output.docx>");
@@ -522,7 +500,4 @@ if (!inputPath || !outputPath) {
 
 buildDocument(inputPath, outputPath)
   .then(() => process.exit(0))
-  .catch(err => {
-    console.error("❌ Ошибка:", err);
-    process.exit(1);
-  });
+  .catch(err => { console.error("❌", err); process.exit(1); });

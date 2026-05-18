@@ -1,5 +1,13 @@
 const RENDER_API_URL = "https://explore-armenia-tour.onrender.com";
 
+// Пробуждаем Render перед важными запросами
+async function wakeUpRender() {
+  try {
+    await fetch(`${RENDER_API_URL}/health`, { method: 'GET' });
+    await new Promise(r => setTimeout(r, 2000));
+  } catch (e) { }
+}
+
 // ============================================================
 // ГЕНЕРАЦИЯ ТУРА
 // ============================================================
@@ -144,6 +152,8 @@ async function loadPlaces() {
 // ============================================================
 
 async function savePlace() {
+  if (btn) { btn.innerText = '⏳ Подключаемся...'; btn.disabled = true; }
+  await wakeUpRender();
   const aliasesRaw = document.getElementById('p_aliases')?.value || '';
   const aliases = aliasesRaw.split(',').map(a => a.trim()).filter(Boolean);
 
@@ -153,44 +163,64 @@ async function savePlace() {
     slug: document.getElementById('p_slug')?.value.trim() || '',
     category: document.getElementById('p_cat')?.value || 'monastery',
     region: document.getElementById('p_region')?.value.trim() || '',
-    desc_ru: '',
-    desc_en: '',
+    desc_ru: '', desc_en: '', promo_en: '',
     promo_ru: document.getElementById('p_promo')?.value.trim() || '',
-    promo_en: '',
     photo_main: document.getElementById('p_img1')?.value.trim() || '',
     photo_secondary: document.getElementById('p_img2')?.value.trim() || '',
     aliases
   };
 
-  if (!data.name_ru || !data.slug) {
-    alert("Заполните название и slug");
-    return;
-  }
+  if (!data.name_ru || !data.slug) { alert("Заполните название и slug"); return; }
 
   const editingId = document.getElementById('editing_id')?.value;
   const method = editingId ? 'PUT' : 'POST';
-  const url = editingId
-    ? `${RENDER_API_URL}/places/${editingId}`
-    : `${RENDER_API_URL}/places`;
+  const url = editingId ? `${RENDER_API_URL}/places/${editingId}` : `${RENDER_API_URL}/places`;
 
-  try {
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
+  const btn = document.querySelector('button[onclick="savePlace()"]');
+  const orig = btn?.innerText;
+  if (btn) { btn.disabled = true; btn.innerText = '⏳ Сохраняем...'; }
 
-    if (res.ok) {
-      alert(editingId ? "✅ Место обновлено!" : "✅ Место добавлено!");
-      if (typeof resetForm === 'function') resetForm();
-      loadPlaces();
-    } else {
-      const err = await res.json();
-      alert(`Ошибка: ${err.detail}`);
+  const tryFetch = async (attempt) => {
+    if (attempt > 1) {
+      if (btn) btn.innerText = `⏳ Попытка ${attempt}/3 (сервер просыпается...)`;
+      await new Promise(r => setTimeout(r, 8000));
     }
-  } catch (e) {
-    alert(`Ошибка сети: ${e.message}`);
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 50000);
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+        signal: ctrl.signal
+      });
+      clearTimeout(t);
+      return res;
+    } catch (e) {
+      clearTimeout(t);
+      throw e;
+    }
+  };
+
+  for (let i = 1; i <= 3; i++) {
+    try {
+      const res = await tryFetch(i);
+      if (res.ok) {
+        alert(editingId ? "✅ Место обновлено!" : "✅ Место добавлено!");
+        if (typeof resetForm === 'function') resetForm();
+        loadPlaces();
+        break;
+      } else {
+        const err = await res.json();
+        alert(`Ошибка: ${err.detail}`);
+        break;
+      }
+    } catch (e) {
+      if (i === 3) alert('Сервер не отвечает. Подождите 30 сек и попробуйте снова.');
+    }
   }
+
+  if (btn) { btn.disabled = false; btn.innerText = orig; }
 }
 
 // ============================================================
