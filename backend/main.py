@@ -1,5 +1,5 @@
 # ============================================================
-# ExploreArmenia — Главный файл FastAPI сервера (исправленный)
+# ExploreArmenia — Главный файл FastAPI сервера (Финальный)
 # ============================================================
 
 import os
@@ -98,7 +98,6 @@ def health_db():
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*) as cnt FROM places")
         row = cur.fetchone()
-        # PyMySQL с DictCursor возвращает словарь
         count = row['cnt'] if isinstance(row, dict) else row[0]
         cur.close()
         conn.close()
@@ -182,13 +181,12 @@ def download_file(file_id: str, format: str):
 def get_places(search: Optional[str] = None):
     conn = get_db_connection()
     cursor = conn.cursor()
+    # Так как мы удаляем физически, флаг is_active больше не проверяем (или проверяем, если он остался по дефолту TRUE)
     query = "SELECT * FROM places WHERE is_active = TRUE"
     params = []
     if search:
-        # Ищем совпадения на любом из 4 языков
         query += " AND (name_ru LIKE %s OR name_en LIKE %s OR name_de LIKE %s OR name_hy LIKE %s)"
         params.extend([f"%{search}%", f"%{search}%", f"%{search}%", f"%{search}%"])
-    
     query += " ORDER BY name_ru ASC"
     cursor.execute(query, params)
     places = cursor.fetchall()
@@ -220,26 +218,22 @@ def create_place(place: PlaceCreate):
         cursor.close()
         conn.close()
 
+
 @app.put("/places/{place_id}")
 def update_place(place_id: int, place: PlaceCreate):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            UPDATE places SET 
-                slug=%s, 
-                name_ru=%s, name_en=%s, name_de=%s, name_hy=%s,
-                desc_ru=%s, desc_en=%s, desc_de=%s, desc_hy=%s, 
-                photo_main=%s
+            UPDATE places SET slug=%s, name_ru=%s, name_en=%s, name_de=%s, name_hy=%s,
+                desc_ru=%s, desc_en=%s, desc_de=%s, desc_hy=%s, photo_main=%s
             WHERE id=%s
         """, (
-            place.slug, 
-            place.name_ru, place.name_en, place.name_de, place.name_hy,
+            place.slug, place.name_ru, place.name_en, place.name_de, place.name_hy,
             place.desc_ru, place.desc_en, place.desc_de, place.desc_hy,
             place.photo_main, place_id
         ))
         conn.commit()
-        
         cursor.execute("DELETE FROM place_aliases WHERE place_id = %s", (place_id,))
         for alias in place.aliases:
             if alias.strip():
@@ -250,7 +244,6 @@ def update_place(place_id: int, place: PlaceCreate):
         conn.commit()
         return {"status": "updated"}
     except Exception as e:
-        import traceback
         raise HTTPException(status_code=500, detail=traceback.format_exc())
     finally:
         cursor.close()
@@ -261,7 +254,13 @@ def update_place(place_id: int, place: PlaceCreate):
 def delete_place(place_id: int):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("UPDATE places SET is_active = FALSE WHERE id = %s", (place_id,))
-    cursor.close()
-    conn.close()
-    return {"status": "deleted"}
+    try:
+        cursor.execute("DELETE FROM place_aliases WHERE place_id = %s", (place_id,))
+        cursor.execute("DELETE FROM places WHERE id = %s", (place_id,))
+        conn.commit()
+        return {"status": "deleted", "id": place_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка удаления: {str(e)}")
+    finally:
+        cursor.close()
+        conn.close()
