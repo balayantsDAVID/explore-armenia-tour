@@ -181,13 +181,22 @@ def download_file(file_id: str, format: str):
 def get_places(search: Optional[str] = None):
     conn = get_db_connection()
     cursor = conn.cursor()
-    # Так как мы удаляем физически, флаг is_active больше не проверяем (или проверяем, если он остался по дефолту TRUE)
-    query = "SELECT * FROM places WHERE is_active = TRUE"
+    
+    # Добавили GROUP_CONCAT, чтобы забрать псевдонимы из связанной таблицы
+    query = """
+        SELECT p.*, GROUP_CONCAT(pa.alias_name SEPARATOR ', ') as aliases_str
+        FROM places p
+        LEFT JOIN place_aliases pa ON p.id = pa.place_id
+        WHERE p.is_active = TRUE
+    """
     params = []
     if search:
-        query += " AND (name_ru LIKE %s OR name_en LIKE %s OR name_de LIKE %s OR name_hy LIKE %s)"
+        query += " AND (p.name_ru LIKE %s OR p.name_en LIKE %s OR p.name_de LIKE %s OR p.name_hy LIKE %s)"
         params.extend([f"%{search}%", f"%{search}%", f"%{search}%", f"%{search}%"])
-    query += " ORDER BY name_ru ASC"
+    
+    # Группируем по ID места, чтобы псевдонимы склеились в одну строку
+    query += " GROUP BY p.id ORDER BY p.name_ru ASC"
+    
     cursor.execute(query, params)
     places = cursor.fetchall()
     cursor.close()
