@@ -1,26 +1,36 @@
 // ============================================================
-// ExploreArmenia — DOCX Builder v4
+// ExploreArmenia — DOCX Builder v5 (FINAL)
 // ============================================================
-// ТОЧНЫЕ РАЗМЕРЫ (по ТЗ):
+// АРХИТЕКТУРА:
+//   Header/Footer — VML фигуры (прямоугольники, круг), НЕ таблицы.
+//   Фигуры позиционируются абсолютно от края страницы.
+//   Нет белых зазоров, нет лишних отступов.
 //
-// HEADER (1 строка таблицы на всю ширину A4 = 11906 DXA):
-//   Высота строки:       3.48 cm = 1973 DXA    фон: #deebf7
-//   Левая ячейка:        3.85 cm = 2183 DXA    фон: #deebf7  — логотип 3.35cm×3.35cm оригинал
-//   Правая ячейка:       остаток = 9723 DXA    фон: #36c6f5  — текст 26pt белый
+// HEADER (3 фигуры + лого + текст):
+//   Фигура 1: #deebf7,  21.06 × 3.48 cm, top=0, left=0   (фон)
+//   Фигура 2: #36c6f5,  17.21 × 3.48 cm, top=0, left=3.85 (синяя полоса)
+//   Фигура 3: #ffffff,  3.35  × 3.35 cm, top=0.065, left=0.25 (круг лого)
+//   Лого:     PNG оригинал 3.35×3.35 cm поверх круга
+//   Текст:    26pt белый Cambria bold по центру синей полосы
+//
+// FOOTER (1 фигура + текст):
+//   Фигура: #deebf7, 21.06 × 2.49 cm
+//   Слоган: 18pt #c10000 bold
+//   Контакты: 10pt #800000
 //
 // РАЗДЕЛИТЕЛЬ ДНЯ:
-//   Высота: 0.15 cm, ширина = правая колонка (~11.35 cm), цвет: #36c6f5
-//
-// FOOTER (таблица на всю ширину A4):
-//   Высота: 2.49 cm = 1412 DXA    фон: #deebf7
-//   Слоган: 18pt, цвет #c10000
-//   Контакты: 10pt, цвет #800000  (без номера страницы)
+//   VML rect: #36c6f5, 11.53 × 0.15 cm (фигура в правой колонке)
 // ============================================================
 
+'use strict';
+
 const {
-  Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-  ImageRun, Header, Footer, AlignmentType, BorderStyle, WidthType,
-  ShadingType, LevelFormat, VerticalAlign, TableRowHeight, HeightRule
+  Document, Packer, Paragraph, TextRun,
+  Table, TableRow, TableCell,
+  ImageRun, Header, Footer,
+  AlignmentType, BorderStyle, WidthType,
+  ShadingType, LevelFormat, VerticalAlign,
+  HeightRule, ImportedXmlComponent
 } = require('docx');
 
 const fs = require('fs');
@@ -28,48 +38,38 @@ const path = require('path');
 const https = require('https');
 const http = require('http');
 
-// ─────────────────────────────────────────────
-// ШРИФТ
-// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// КОНСТАНТЫ
+// ═══════════════════════════════════════════════════════════
 const FONT = 'Cambria';
 
-// ─────────────────────────────────────────────
-// ЦВЕТА (HEX без #)
-// ─────────────────────────────────────────────
-const C_LIGHTBLUE = 'deebf7';  // фон хедера и футера
-const C_CYAN = '36c6f5';  // фон правой части хедера + линия дня
-const C_SLOGAN = 'c10000';  // слоган в футере
-const C_CONTACTS = '800000';  // контакты в футере + заголовки дней
+// Цвета (без #)
+const C_LIGHTBLUE = 'deebf7';
+const C_CYAN = '36c6f5';
 const C_WHITE = 'FFFFFF';
+const C_SLOGAN = 'c10000';
+const C_CONTACTS = '800000';
 const C_BLACK = '000000';
 
-// ─────────────────────────────────────────────
-// РАЗМЕРЫ (DXA: 1 дюйм = 1440 DXA, 1 cm ≈ 567 DXA)
-// ─────────────────────────────────────────────
-const PAGE_W = 11906;  // A4 ширина
-const PAGE_H = 16838;  // A4 высота
-const MARGIN = 851;    // поля ~1.5 cm
+// Страница A4 в DXA (1 дюйм = 1440 DXA)
+const PAGE_W = 11906;
+const PAGE_H = 16838;
+const MARGIN = 851;   // ~1.5 cm
 
-// Контентная ширина (с полями)
+// Контентная ширина
 const CONTENT_W = PAGE_W - MARGIN * 2;  // 10204 DXA
 
-// HEADER
-const HDR_ROW_H = 1973;   // 3.48 cm — высота всей строки хедера
-const HDR_LOGO_W = 2183;   // 3.85 cm — ширина ячейки с логотипом (круг 3.35 + padding)
-const HDR_TITLE_W = PAGE_W - HDR_LOGO_W;  // 9723 DXA — ширина ячейки с заголовком
-const LOGO_SIZE = 95;     // 3.35 cm = 95 pt — размер логотипа
+// Колонки дней: 35% фото | 65% текст
+const COL_PHOTO = Math.round(CONTENT_W * 0.35);  // 3571 DXA
+const COL_GAP = 200;
+const COL_TEXT = CONTENT_W - COL_PHOTO - COL_GAP; // 6433 DXA
 
-// Колонки дней: 35% фото / 65% текст
-const COL_PHOTO = Math.round(CONTENT_W * 0.35);   // 3571 DXA
-const GAP = 200;                              // разрыв между колонками
-const COL_TEXT_W = CONTENT_W - COL_PHOTO - GAP;    // 6433 DXA
+// Логотип (в pt, не ресайзим: 3.35 cm = ~95 pt)
+const LOGO_PT = 95;
 
-// FOOTER
-const FTR_ROW_H = 1412;   // 2.49 cm
-
-// ─────────────────────────────────────────────
-// СЛОВАРЬ
-// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// СЛОВАРИ
+// ═══════════════════════════════════════════════════════════
 const DICT = {
   ru: {
     day: 'День', title: 'ПРОГРАММА ТУРА ПО АРМЕНИИ',
@@ -96,39 +96,313 @@ const DICT = {
     guests: 'Teilnehmerzahl:', hotel: 'Hotel:', contact: 'Kontaktperson:'
   },
   hy: {
-    day: 'Օր', title: 'ՀԱՅԱUТАНԻ TUРԻ ԾPAGRAM',
+    day: 'Օր', title: 'ՀԱՅԱUТАНԻ ТУRԻ ԾPAGRAM',
     slogan: 'Հայաuтан - mի երкir, orp kаrелi ek sirayel!',
     contacts: '(+374 91) 01 56 60 (Viber, WhatsApp),  info@explorearmenia.am,  www.explorearmenia.am',
-    start: 'Tuри meknarкutyan аmsatіv:', end: 'Turi аvаrtіn аmsatіv:',
+    start: 'Tur meknarкutyan amsativ:', end: 'Turi avаrtin аmsatіv:',
     fIn: 'Ժаmanum рейs:', fOut: 'Маекnum рейs:',
     guests: 'Mrtsаkіtsner:', hotel: 'Хndrаnос:', contact: 'Кontaktnayin аndzn:'
   }
 };
 
-// ─────────────────────────────────────────────
-// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
-// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// VML ФИГУРЫ
+// ═══════════════════════════════════════════════════════════
+// Позиционирование: mso-position-horizontal-relative:page
+// означает абсолютную привязку к листу, а не к полям.
 
-/** Невидимая граница */
-function nb() {
-  return { style: BorderStyle.NONE, size: 0, color: 'FFFFFF', space: 0 };
+/**
+ * VML прямоугольник — абсолютная позиция от края страницы.
+ * @param {number} wCm   ширина в cm
+ * @param {number} hCm   высота в cm
+ * @param {string} color hex без #
+ * @param {number} topCm отступ от верха страницы в cm
+ * @param {number} leftCm отступ от левого края страницы в cm
+ * @param {number} zIndex z-индекс (отрицательный = за текстом)
+ */
+function vmlRect(wCm, hCm, color, topCm, leftCm, zIndex) {
+  const style = [
+    'position:absolute',
+    `left:${leftCm}cm`,
+    `top:${topCm}cm`,
+    `width:${wCm}cm`,
+    `height:${hCm}cm`,
+    `z-index:${zIndex}`,
+    'mso-position-horizontal-relative:page',
+    'mso-position-vertical-relative:page',
+  ].join(';');
+
+  return new ImportedXmlComponent(
+    '<w:p' +
+    ' xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"' +
+    ' xmlns:v="urn:schemas-microsoft-com:vml"' +
+    ' xmlns:o="urn:schemas-microsoft-com:office:office">' +
+    '<w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr>' +
+    '<w:r><w:rPr/><w:pict>' +
+    `<v:rect style="${style}" fillcolor="#${color}" stroked="f">` +
+    '<v:fill type="solid"/>' +
+    '</v:rect>' +
+    '</w:pict></w:r></w:p>'
+  );
 }
 
-/** Все 4 границы ячейки — невидимые */
-function noBorders() {
-  return { top: nb(), bottom: nb(), left: nb(), right: nb() };
+/**
+ * VML овал/круг — абсолютная позиция от края страницы.
+ * @param {number} dCm   диаметр (ширина = высота) в cm
+ * @param {string} color hex без #
+ * @param {number} topCm
+ * @param {number} leftCm
+ * @param {number} zIndex
+ */
+function vmlCircle(dCm, color, topCm, leftCm, zIndex) {
+  const style = [
+    'position:absolute',
+    `left:${leftCm}cm`,
+    `top:${topCm}cm`,
+    `width:${dCm}cm`,
+    `height:${dCm}cm`,
+    `z-index:${zIndex}`,
+    'mso-position-horizontal-relative:page',
+    'mso-position-vertical-relative:page',
+  ].join(';');
+
+  return new ImportedXmlComponent(
+    '<w:p' +
+    ' xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"' +
+    ' xmlns:v="urn:schemas-microsoft-com:vml"' +
+    ' xmlns:o="urn:schemas-microsoft-com:office:office">' +
+    '<w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr>' +
+    '<w:r><w:rPr/><w:pict>' +
+    `<v:oval style="${style}" fillcolor="#${color}" stroked="f">` +
+    '<v:fill type="solid"/>' +
+    '</v:oval>' +
+    '</w:pict></w:r></w:p>'
+  );
 }
 
-/** Все 6 границ таблицы — невидимые */
-function noTableBorders() {
-  return { top: nb(), bottom: nb(), left: nb(), right: nb(), insideH: nb(), insideV: nb() };
+/**
+ * VML плавающее изображение — абсолютная позиция от края страницы.
+ * @param {Buffer} imgData  буфер PNG
+ * @param {number} wCm      ширина в cm
+ * @param {number} hCm      высота в cm
+ * @param {number} topCm
+ * @param {number} leftCm
+ * @param {number} zIndex
+ * @param {string} imgId    уникальный id (строка)
+ */
+function vmlImage(imgData, wCm, hCm, topCm, leftCm, zIndex, imgId) {
+  const b64 = imgData.toString('base64');
+  const style = [
+    'position:absolute',
+    `left:${leftCm}cm`,
+    `top:${topCm}cm`,
+    `width:${wCm}cm`,
+    `height:${hCm}cm`,
+    `z-index:${zIndex}`,
+    'mso-position-horizontal-relative:page',
+    'mso-position-vertical-relative:page',
+  ].join(';');
+
+  return new ImportedXmlComponent(
+    '<w:p' +
+    ' xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"' +
+    ' xmlns:v="urn:schemas-microsoft-com:vml"' +
+    ' xmlns:o="urn:schemas-microsoft-com:office:office">' +
+    '<w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr>' +
+    '<w:r><w:rPr/><w:pict>' +
+    `<v:shape id="${imgId}" type="#_x0000_t75" style="${style}" stroked="f">` +
+    '<v:imagedata src="data:image/png;base64,' + b64 + '" o:title="logo"/>' +
+    '</v:shape>' +
+    '</w:pict></w:r></w:p>'
+  );
 }
 
-/** Скачать изображение по URL */
+// ═══════════════════════════════════════════════════════════
+// HELPER: невидимые границы
+// ═══════════════════════════════════════════════════════════
+const NB = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF', space: 0 };
+const NO_BORDERS_CELL = { top: NB, bottom: NB, left: NB, right: NB };
+const NO_BORDERS_TABLE = { top: NB, bottom: NB, left: NB, right: NB, insideH: NB, insideV: NB };
+
+// ═══════════════════════════════════════════════════════════
+// «N ДНЕЙ / M НОЧЕЙ»
+// ═══════════════════════════════════════════════════════════
+function daysNightsStr(days, lang) {
+  const n = days.length, m = Math.max(n - 1, 0);
+  if (lang === 'ru') return `(${n} ДНЕЙ / ${m} НОЧЕЙ)`;
+  if (lang === 'en') return `(${n} DAYS / ${m} NIGHTS)`;
+  if (lang === 'de') return `(${n} TAGE / ${m} NÄCHTE)`;
+  return `(${n} / ${m})`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// HEADER — фигуры + текст поверх
+// ═══════════════════════════════════════════════════════════
+// Структура (слои снизу вверх):
+//   z=-4  Фон #deebf7:  21.06 × 3.48 cm  top=0  left=0
+//   z=-3  Синяя полоса: 17.21 × 3.48 cm  top=0  left=3.85
+//   z=-2  Белый круг:    3.35 ×  3.35 cm  top=0.065  left=0.25
+//   z=-1  Лого PNG:      3.35 ×  3.35 cm  top=0.065  left=0.25
+//   Текст (inline): 26pt белый, вертикально центрирован в 3.48 cm
+//
+// Общая высота хедера = 3.48 cm → в секции header margin = 0,
+// отступ контента сверху = 3.48 cm ≈ 1973 DXA
+//
+function createHeader(t, logoPath, daysNights) {
+  const children = [];
+
+  // ── Фигуры (рисуются через VML) ─────────────────────────────────
+
+  // 1. Фон header: #deebf7, вся ширина A4, высота 3.48 cm
+  children.push(vmlRect(21.06, 3.48, C_LIGHTBLUE, 0, 0, -4));
+
+  // 2. Синяя полоса: от x=3.85 до правого края, высота 3.48 cm
+  //    ширина = 21.06 - 3.85 = 17.21 cm
+  children.push(vmlRect(17.21, 3.48, C_CYAN, 0, 3.85, -3));
+
+  // 3. Белый круг под лого: 3.35×3.35 cm
+  //    центрирован по вертикали: top = (3.48 - 3.35) / 2 = 0.065 cm
+  //    отступ слева: 0.25 cm
+  children.push(vmlCircle(3.35, C_WHITE, 0.065, 0.25, -2));
+
+  // 4. Лого поверх круга (тот же размер и позиция)
+  const logoExists = fs.existsSync(logoPath);
+  if (logoExists) {
+    const logoData = fs.readFileSync(logoPath);
+    children.push(vmlImage(logoData, 3.35, 3.35, 0.065, 0.25, -1, 'logo_hdr'));
+  }
+
+  // ── Текст поверх фигур ───────────────────────────────────────────
+  // Пустой абзац-распорка, чтобы текст попал примерно на 30% высоты хедера
+  // header margin=0, поэтому первый параграф начинается от самого верха.
+  // Синяя полоса 3.48 cm → текст нужно сдвинуть на ~0.8 cm вниз
+  children.push(new Paragraph({
+    spacing: { before: 0, after: 0 },
+    children: [new TextRun({ text: '', size: 2 })]
+  }));
+
+  // Строка 1: название программы, 26pt, белый, жирный
+  children.push(new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 180, after: 40 },
+    // Отступ слева = ширина лого ячейки (3.85 cm ≈ 2183 DXA) + немного
+    indent: { left: 2200 },
+    children: [
+      new TextRun({
+        text: t.title,
+        bold: true,
+        size: 52,      // 26pt = 52 half-points
+        font: FONT,
+        color: C_WHITE,
+      })
+    ]
+  }));
+
+  // Строка 2: (N ДНЕЙ / M НОЧЕЙ), 22pt, белый, жирный
+  children.push(new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 0, after: 0 },
+    indent: { left: 2200 },
+    children: [
+      new TextRun({
+        text: daysNights,
+        bold: true,
+        size: 44,      // 22pt
+        font: FONT,
+        color: C_WHITE,
+      })
+    ]
+  }));
+
+  return new Header({ children });
+}
+
+// ═══════════════════════════════════════════════════════════
+// FOOTER — фигура + текст поверх
+// ═══════════════════════════════════════════════════════════
+// Фон #deebf7: 21.06 × 2.49 cm, top=0, left=0
+// Текст центрирован внутри.
+//
+function createFooter(t) {
+  const children = [];
+
+  // Фон: #deebf7, вся ширина, высота 2.49 cm
+  children.push(vmlRect(21.06, 2.49, C_LIGHTBLUE, 0, 0, -1));
+
+  // Слоган: 18pt, #c10000, жирный
+  children.push(new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 200, after: 60 },
+    children: [
+      new TextRun({
+        text: t.slogan,
+        bold: true,
+        size: 36,    // 18pt
+        font: FONT,
+        color: C_SLOGAN,
+      })
+    ]
+  }));
+
+  // Контакты: 10pt, #800000, без номера страницы
+  children.push(new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 0, after: 0 },
+    children: [
+      new TextRun({
+        text: t.contacts,
+        size: 20,    // 10pt
+        font: FONT,
+        color: C_CONTACTS,
+      })
+    ]
+  }));
+
+  return new Footer({ children });
+}
+
+// ═══════════════════════════════════════════════════════════
+// МЕТАДАННЫЕ ТУРА
+// ═══════════════════════════════════════════════════════════
+function buildMetaBlock(meta, t) {
+  const fields = [
+    [t.start, meta.start],
+    [t.end, meta.end],
+    [t.fIn, meta.flight_in],
+    [t.fOut, meta.flight_out],
+    [t.guests, meta.guests],
+    [t.hotel, meta.hotel],
+    [t.contact, meta.contact],
+  ];
+
+  return fields
+    .filter(([, val]) => val && String(val).trim())
+    .map(([label, val]) => {
+      const isHotel = label === t.hotel;
+      return new Paragraph({
+        alignment: AlignmentType.LEFT,
+        spacing: { before: 0, after: 80 },
+        children: [
+          new TextRun({ text: label + ' ', bold: true, size: 24, font: FONT, color: C_BLACK }),
+          new TextRun({
+            text: String(val),
+            bold: isHotel,
+            size: 24,
+            font: FONT,
+            color: isHotel ? C_CONTACTS : C_BLACK
+          }),
+        ]
+      });
+    });
+}
+
+// ═══════════════════════════════════════════════════════════
+// СКАЧАТЬ ИЗОБРАЖЕНИЕ
+// ═══════════════════════════════════════════════════════════
 async function downloadImage(url, destPath) {
   if (!url || !url.trim()) return null;
   return new Promise((resolve) => {
-    const proto = url.startsWith('https') ? https : http;
+    const proto = url.trim().startsWith('https') ? https : http;
     const req = proto.get(url.trim(), (res) => {
       if (res.statusCode !== 200) { resolve(null); return; }
       const file = fs.createWriteStream(destPath);
@@ -141,307 +415,96 @@ async function downloadImage(url, destPath) {
   });
 }
 
-/** «N ДНЕЙ / M НОЧЕЙ» по языку */
-function daysNightsStr(days, lang) {
-  const n = days.length, m = Math.max(n - 1, 0);
-  if (lang === 'ru') return `(${n} ДНЕЙ / ${m} НОЧЕЙ)`;
-  if (lang === 'en') return `(${n} DAYS / ${m} NIGHTS)`;
-  if (lang === 'de') return `(${n} TAGE / ${m} NÄCHTE)`;
-  return `(${n} / ${m})`;
-}
-
-// ─────────────────────────────────────────────
-// HEADER
-// ─────────────────────────────────────────────
-// Структура: таблица на ПОЛНУЮ ширину страницы (PAGE_W = 11906 DXA),
-// 1 строка фиксированной высоты HDR_ROW_H:
-//   Левая ячейка  (HDR_LOGO_W):  фон #deebf7, логотип 95×95pt по центру
-//   Правая ячейка (HDR_TITLE_W): фон #36c6f5, текст 26pt белый по центру
-//
-function createHeader(t, logoPath, daysNights) {
-  const logoExists = fs.existsSync(logoPath);
-
-  // ── Левая ячейка: логотип ──────────────────────────────────────
-  const logoContent = logoExists
-    ? new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 0 },
-      children: [
-        new ImageRun({
-          type: 'png',
-          data: fs.readFileSync(logoPath),
-          // Вставляем оригинал 3.35 cm × 3.35 cm = 95 pt × 95 pt
-          transformation: { width: LOGO_SIZE, height: LOGO_SIZE }
-        })
-      ]
-    })
-    : new Paragraph({ children: [new TextRun({ text: '' })] });
-
-  const leftCell = new TableCell({
-    width: { size: HDR_LOGO_W, type: WidthType.DXA },
-    borders: noBorders(),
-    shading: { fill: C_LIGHTBLUE, type: ShadingType.CLEAR },
-    margins: { top: 40, bottom: 40, left: 160, right: 100 },
-    verticalAlign: VerticalAlign.CENTER,
-    children: [logoContent],
-  });
-
-  // ── Правая ячейка: заголовок ───────────────────────────────────
-  const titlePara = new Paragraph({
-    alignment: AlignmentType.CENTER,
-    spacing: { before: 40, after: 20 },
-    children: [
-      new TextRun({
-        text: t.title,
-        bold: true,
-        size: 52,   // 26pt (в DOCX size = half-points, 26*2=52)
-        font: FONT,
-        color: C_WHITE,
-      })
-    ]
-  });
-
-  const subtitlePara = new Paragraph({
-    alignment: AlignmentType.CENTER,
-    spacing: { before: 0, after: 40 },
-    children: [
-      new TextRun({
-        text: daysNights,
-        bold: true,
-        size: 44,   // 22pt
-        font: FONT,
-        color: C_WHITE,
-      })
-    ]
-  });
-
-  const rightCell = new TableCell({
-    width: { size: HDR_TITLE_W, type: WidthType.DXA },
-    borders: noBorders(),
-    shading: { fill: C_CYAN, type: ShadingType.CLEAR },
-    margins: { top: 40, bottom: 40, left: 240, right: 160 },
-    verticalAlign: VerticalAlign.CENTER,
-    children: [titlePara, subtitlePara],
-  });
-
-  // ── Таблица-шапка ──────────────────────────────────────────────
-  const headerTable = new Table({
-    width: { size: PAGE_W, type: WidthType.DXA },
-    columnWidths: [HDR_LOGO_W, HDR_TITLE_W],
-    borders: noTableBorders(),
-    rows: [
-      new TableRow({
-        // Фиксированная высота строки 3.48 cm
-        height: { value: HDR_ROW_H, rule: HeightRule.EXACT },
-        children: [leftCell, rightCell],
-      })
-    ]
-  });
-
-  return new Header({
-    children: [
-      new Paragraph({ spacing: { before: 0, after: 0 }, children: [] }),
-      headerTable,
-    ]
-  });
-}
-
-// ─────────────────────────────────────────────
-// FOOTER
-// ─────────────────────────────────────────────
-// Таблица на полную ширину, 1 строка высотой 2.49 cm, фон #deebf7.
-// Внутри по центру:
-//   Слоган:   18pt, цвет #c10000
-//   Контакты: 10pt, цвет #800000  (без номера страницы)
-//
-function createFooter(t) {
-  const sloganPara = new Paragraph({
-    alignment: AlignmentType.CENTER,
-    spacing: { before: 60, after: 30 },
-    children: [
-      new TextRun({
-        text: t.slogan,
-        bold: true,
-        size: 36,   // 18pt
-        font: FONT,
-        color: C_SLOGAN,
-      })
-    ]
-  });
-
-  const contactsPara = new Paragraph({
-    alignment: AlignmentType.CENTER,
-    spacing: { before: 0, after: 60 },
-    children: [
-      new TextRun({
-        text: t.contacts,
-        size: 20,   // 10pt
-        font: FONT,
-        color: C_CONTACTS,
-      })
-    ]
-  });
-
-  const footerCell = new TableCell({
-    width: { size: PAGE_W, type: WidthType.DXA },
-    borders: noBorders(),
-    shading: { fill: C_LIGHTBLUE, type: ShadingType.CLEAR },
-    margins: { top: 40, bottom: 40, left: 200, right: 200 },
-    verticalAlign: VerticalAlign.CENTER,
-    children: [sloganPara, contactsPara],
-  });
-
-  const footerTable = new Table({
-    width: { size: PAGE_W, type: WidthType.DXA },
-    columnWidths: [PAGE_W],
-    borders: noTableBorders(),
-    rows: [
-      new TableRow({
-        height: { value: FTR_ROW_H, rule: HeightRule.ATLEAST },
-        children: [footerCell],
-      })
-    ]
-  });
-
-  return new Footer({
-    children: [
-      new Paragraph({ spacing: { before: 0, after: 0 }, children: [] }),
-      footerTable,
-    ]
-  });
-}
-
-// ─────────────────────────────────────────────
-// БЛОК МЕТАДАННЫХ
-// ─────────────────────────────────────────────
-function buildMetaBlock(meta, t) {
-  const fields = [
-    [t.start, meta.start],
-    [t.end, meta.end],
-    [t.fIn, meta.flight_in],
-    [t.fOut, meta.flight_out],
-    [t.guests, meta.guests],
-    [t.hotel, meta.hotel],
-    [t.contact, meta.contact],
-  ];
-
-  const paras = [];
-  for (const [label, val] of fields) {
-    if (!val || !String(val).trim()) continue;
-
-    const valueRun = (label === t.hotel)
-      // Отель: жирный, тёмно-красный
-      ? new TextRun({ text: String(val), bold: true, size: 24, font: FONT, color: C_CONTACTS })
-      : new TextRun({ text: String(val), size: 24, font: FONT, color: C_BLACK });
-
-    paras.push(new Paragraph({
-      alignment: AlignmentType.LEFT,
-      spacing: { before: 0, after: 80 },
-      children: [
-        new TextRun({ text: label + ' ', bold: true, size: 24, font: FONT, color: C_BLACK }),
-        valueRun,
-      ]
-    }));
-  }
-  return paras;
-}
-
-// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
 // БЛОК ОДНОГО ДНЯ
-// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
 // Правая колонка:
-//   Заголовок «День N (дд.мм, день)»: 18pt, #800000, RIGHT
-//   Линия #36c6f5: 0.15cm × ширина правой колонки
-//   Маршрут: 18pt жирный, #800000, RIGHT
-//   Буллиты: 12pt, Cambria, justified
-// Левая колонка: фотографии
+//   - Заголовок «День N (дд.мм, день)»: 18pt, #800000, RIGHT
+//   - Разделитель: VML rect #36c6f5, 11.53 × 0.15 cm (inline)
+//   - Маршрут: 18pt жирный, #800000, RIGHT
+//   - Буллиты: 12pt Cambria, justified
+// Левая колонка: фотографии из БД
 //
-async function buildDayBlock(day, dayIndex, t, tempDir) {
-  const dayNum = day.day_number || (dayIndex + 1);
+async function buildDayBlock(day, dayIdx, t, tempDir) {
+  const dayNum = day.day_number || (dayIdx + 1);
   const dateStr = day.date_str || '';
   const rawText = day.raw_text || '';
   const places = day.places || [];
 
+  // Убираем «День N —» из начала
   const cleanRoute = rawText
     .replace(/^(День|Day|Tag|Օr)\s*\d+\s*[-—–]+\s*/i, '')
     .trim();
 
-  // ── Правая колонка: текст ──────────────────────────────────────
+  // ─── ПРАВАЯ КОЛОНКА ─────────────────────────────────────────────
   const textParas = [];
 
-  // Заголовок дня: 18pt, #800000, RIGHT
+  // 1. Заголовок дня: «День N (дата)» — 18pt, #800000, RIGHT
   textParas.push(new Paragraph({
     alignment: AlignmentType.RIGHT,
-    spacing: { before: 160, after: 40 },
+    spacing: { before: 160, after: 60 },
     children: [
       new TextRun({
         text: `${t.day} ${dayNum} (${dateStr})`,
         bold: true,
-        size: 36,   // 18pt
+        size: 36,
         font: FONT,
-        color: C_CONTACTS,  // #800000
+        color: C_CONTACTS,
       })
     ]
   }));
 
-  // Линия-разделитель #36c6f5: высота 0.15cm через border bottom параграфа
-  // Ширина = ширина правой колонки (параграф занимает всю ячейку)
-  const { createVmlRectangle } = require('./docx_shapes.js');
+  // 2. Синяя линия-разделитель — VML rect внутри ячейки
+  //    Ширина: 11.53 cm, Высота: 0.15 cm, цвет: #36c6f5
+  //    Позиционируется относительно колонки, прижата вправо.
+  //    Используем relative позиционирование (без page-relative),
+  //    тогда фигура следует за текстом.
+  textParas.push(new ImportedXmlComponent(
+    '<w:p' +
+    ' xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"' +
+    ' xmlns:v="urn:schemas-microsoft-com:vml">' +
+    '<w:pPr>' +
+    '  <w:jc w:val="right"/>' +
+    '  <w:spacing w:before="0" w:after="60"/>' +
+    '</w:pPr>' +
+    '<w:r><w:rPr/><w:pict>' +
+    '<v:rect style="width:11.53cm;height:0.15cm;z-index:1" fillcolor="#36c6f5" stroked="f">' +
+    '<v:fill type="solid"/>' +
+    '</v:rect>' +
+    '</w:pict></w:r></w:p>'
+  ));
 
-  // Вычисляем левый отступ, чтобы линия в 11.53 см была прижата вправо:
-  // Ширина страницы (21.06) - ширина линии (11.53) - правое поле (прим. 1.5) = отступ слева
-  const lineLeftOffsetCm = 21.06 - 11.53 - 1.5; // ~8.03 cm
-
-  textParas.push(
-    // Вставляем плавающую линию перед текстом маршрута
-    createVmlRectangle(11.53, 0.15, '#36c6f5', 0.2, lineLeftOffsetCm, 1)
-  );
-
+  // 3. Маршрут: 18pt жирный, #800000, RIGHT
   textParas.push(new Paragraph({
     alignment: AlignmentType.RIGHT,
-    spacing: { before: 120, after: 120 },
+    spacing: { before: 60, after: 140 },
     children: [
       new TextRun({
         text: cleanRoute,
         bold: true,
         size: 36,
-        font: 'Cambria',
-        color: '800000',
-      })
-    ]
-  }));
-
-  // Маршрут: 18pt жирный, #800000, RIGHT
-  textParas.push(new Paragraph({
-    alignment: AlignmentType.RIGHT,
-    spacing: { before: 40, after: 120 },
-    children: [
-      new TextRun({
-        text: cleanRoute,
-        bold: true,
-        size: 36,   // 18pt
         font: FONT,
-        color: C_CONTACTS,  // #800000
+        color: C_CONTACTS,
       })
     ]
   }));
 
-  // Буллиты: первое слово жирное, остальное обычное, 12pt
+  // 4. Буллиты: первое слово жирное, остаток обычный, 12pt, justified
   for (const place of places) {
     const text = (place.final_text || '').trim();
     if (!text) continue;
 
-    const spaceIdx = text.indexOf(' ');
-    const firstWord = spaceIdx > -1 ? text.slice(0, spaceIdx) : text;
-    const restText = spaceIdx > -1 ? text.slice(spaceIdx + 1) : '';
+    const spIdx = text.indexOf(' ');
+    const firstWord = spIdx > -1 ? text.slice(0, spIdx) : text;
+    const rest = spIdx > -1 ? text.slice(spIdx + 1) : '';
 
     textParas.push(new Paragraph({
       alignment: AlignmentType.JUSTIFIED,
       spacing: { before: 0, after: 100 },
       numbering: { reference: 'bullets', level: 0 },
       children: [
-        new TextRun({ text: firstWord + ' ', bold: true, size: 24, font: FONT, color: C_BLACK }),
-        ...(restText ? [new TextRun({ text: restText, size: 24, font: FONT, color: C_BLACK })] : [])
+        new TextRun({ text: firstWord + (rest ? ' ' : ''), bold: true, size: 24, font: FONT, color: C_BLACK }),
+        ...(rest ? [new TextRun({ text: rest, bold: false, size: 24, font: FONT, color: C_BLACK })] : [])
       ]
     }));
   }
@@ -450,7 +513,7 @@ async function buildDayBlock(day, dayIndex, t, tempDir) {
     textParas.push(new Paragraph({ children: [new TextRun({ text: '' })] }));
   }
 
-  // ── Левая колонка: фотографии ──────────────────────────────────
+  // ─── ЛЕВАЯ КОЛОНКА: ФОТО ────────────────────────────────────────
   const photoParas = [];
   let photoCount = 0;
 
@@ -459,13 +522,13 @@ async function buildDayBlock(day, dayIndex, t, tempDir) {
     const url = (place.photo_main || '').trim();
     if (!url) continue;
 
-    const fname = `photo_d${dayIndex}_p${photoCount}_${Date.now()}.jpg`;
+    const fname = `photo_d${dayIdx}_p${photoCount}_${Date.now()}.jpg`;
     const fpath = path.join(tempDir, fname);
     const ok = await downloadImage(url, fpath);
 
     if (ok && fs.existsSync(fpath)) {
-      const imgPt = Math.round(COL_PHOTO / 20);       // pt (DXA/20 ≈ pt)
-      const imgHeightPt = Math.round(imgPt * 0.70);       // 3:2 пропорция
+      const imgPt = Math.round(COL_PHOTO / 20);      // DXA → pt ≈ /20
+      const imgH = Math.round(imgPt * 0.70);
 
       photoParas.push(new Paragraph({
         spacing: { before: 0, after: 120 },
@@ -474,7 +537,7 @@ async function buildDayBlock(day, dayIndex, t, tempDir) {
           new ImageRun({
             type: 'jpg',
             data: fs.readFileSync(fpath),
-            transformation: { width: imgPt, height: imgHeightPt }
+            transformation: { width: imgPt, height: imgH }
           })
         ]
       }));
@@ -486,18 +549,18 @@ async function buildDayBlock(day, dayIndex, t, tempDir) {
     photoParas.push(new Paragraph({ children: [new TextRun({ text: '' })] }));
   }
 
-  // ── Двухколоночная таблица ─────────────────────────────────────
+  // ─── ДВУХКОЛОНОЧНАЯ ТАБЛИЦА ─────────────────────────────────────
   const leftCell = new TableCell({
     width: { size: COL_PHOTO, type: WidthType.DXA },
-    borders: noBorders(),
-    margins: { top: 0, bottom: 0, left: 0, right: GAP },
+    borders: NO_BORDERS_CELL,
+    margins: { top: 0, bottom: 0, left: 0, right: COL_GAP },
     verticalAlign: VerticalAlign.TOP,
     children: photoParas,
   });
 
   const rightCell = new TableCell({
-    width: { size: COL_TEXT_W, type: WidthType.DXA },
-    borders: noBorders(),
+    width: { size: COL_TEXT, type: WidthType.DXA },
+    borders: NO_BORDERS_CELL,
     margins: { top: 0, bottom: 0, left: 0, right: 0 },
     verticalAlign: VerticalAlign.TOP,
     children: textParas,
@@ -505,15 +568,15 @@ async function buildDayBlock(day, dayIndex, t, tempDir) {
 
   return new Table({
     width: { size: CONTENT_W, type: WidthType.DXA },
-    columnWidths: [COL_PHOTO, COL_TEXT_W],
-    borders: noTableBorders(),
+    columnWidths: [COL_PHOTO, COL_TEXT],
+    borders: NO_BORDERS_TABLE,
     rows: [new TableRow({ children: [leftCell, rightCell] })]
   });
 }
 
-// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
 // ГЛАВНАЯ ФУНКЦИЯ
-// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
 async function buildDocument(inputJsonPath, outputDocxPath) {
   const raw = JSON.parse(fs.readFileSync(inputJsonPath, 'utf8'));
   const lang = raw.lang || 'ru';
@@ -522,43 +585,41 @@ async function buildDocument(inputJsonPath, outputDocxPath) {
   const days = raw.days || [];
   const tempDir = path.dirname(outputDocxPath);
 
-  // Логотип рядом со скриптом
+  // Логотип рядом с этим скриптом
   const logoPath = path.join(__dirname, 'logo.png');
 
   const daysNights = daysNightsStr(days, lang);
 
-  // ── Собираем контент документа ─────────────────────────────────
+  // ─── Контент документа ────────────────────────────────────────
   const docChildren = [];
 
-  // 1. Метаданные тура (без разрыва страниц)
+  // 1. Метаданные (без разрыва страниц)
   docChildren.push(...buildMetaBlock(meta, t));
-  docChildren.push(new Paragraph({ spacing: { before: 200, after: 200 }, children: [] }));
+  docChildren.push(new Paragraph({ spacing: { before: 240, after: 240 }, children: [] }));
 
-  // 2. Дни
+  // 2. Дни тура
   for (let i = 0; i < days.length; i++) {
     const dayTable = await buildDayBlock(days[i], i, t, tempDir);
     docChildren.push(dayTable);
-    docChildren.push(new Paragraph({ spacing: { before: 100, after: 100 }, children: [] }));
+    docChildren.push(new Paragraph({ spacing: { before: 120, after: 120 }, children: [] }));
   }
 
-  // ── Создаём документ ──────────────────────────────────────────
+  // ─── Документ ─────────────────────────────────────────────────
   const doc = new Document({
     numbering: {
-      config: [
-        {
-          reference: 'bullets',
-          levels: [{
-            level: 0,
-            format: LevelFormat.BULLET,
-            text: '\u2022',
-            alignment: AlignmentType.LEFT,
-            style: {
-              paragraph: { indent: { left: 360, hanging: 360 }, spacing: { after: 80 } },
-              run: { font: FONT, size: 24 }
-            }
-          }]
-        }
-      ]
+      config: [{
+        reference: 'bullets',
+        levels: [{
+          level: 0,
+          format: LevelFormat.BULLET,
+          text: '\u2022',
+          alignment: AlignmentType.LEFT,
+          style: {
+            paragraph: { indent: { left: 360, hanging: 360 }, spacing: { after: 80 } },
+            run: { font: FONT, size: 24 }
+          }
+        }]
+      }]
     },
     styles: {
       default: {
@@ -570,26 +631,33 @@ async function buildDocument(inputJsonPath, outputDocxPath) {
         page: {
           size: { width: PAGE_W, height: PAGE_H },
           margin: {
-            top: 2500,    // Смещаем ОСНОВНОЙ текст вниз (из-за плавающего хедера)
-            bottom: 2000, // Смещаем ОСНОВНОЙ текст вверх (из-за плавающего футера)
+            // Верхний отступ контента = высота header = 3.48 cm ≈ 1973 DXA
+            // + небольшой gap ≈ 200 DXA
+            top: 2200,
+            // Нижний отступ = высота footer = 2.49 cm ≈ 1412 DXA + gap
+            bottom: 1700,
             left: MARGIN,
             right: MARGIN,
-            header: 0,    // КРИТИЧНО: прибиваем хедер к нулю
-            footer: 0,    // КРИТИЧНО: прибиваем футер к нулю
+            // header/footer = 0: фигуры прибиваются к краям без отступов
+            header: 0,
+            footer: 0,
           }
         }
-      }
+      },
+      headers: { default: createHeader(t, logoPath, daysNights) },
+      footers: { default: createFooter(t) },
+      children: docChildren,
     }]
-  })
+  });
 
   const buffer = await Packer.toBuffer(doc);
   fs.writeFileSync(outputDocxPath, buffer);
   console.log(`✅ DOCX создан: ${outputDocxPath}`);
 }
 
-// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
 // CLI
-// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
 const [, , inputPath, outputPath] = process.argv;
 
 if (inputPath && outputPath) {
