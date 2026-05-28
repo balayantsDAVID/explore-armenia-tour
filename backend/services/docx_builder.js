@@ -386,18 +386,29 @@ async function buildDayBlock(day, dayIndex, t, tempDir) {
 
   // Линия-разделитель #36c6f5: высота 0.15cm через border bottom параграфа
   // Ширина = ширина правой колонки (параграф занимает всю ячейку)
+  const { createVmlRectangle } = require('./docx_shapes.js');
+
+  // Вычисляем левый отступ, чтобы линия в 11.53 см была прижата вправо:
+  // Ширина страницы (21.06) - ширина линии (11.53) - правое поле (прим. 1.5) = отступ слева
+  const lineLeftOffsetCm = 21.06 - 11.53 - 1.5; // ~8.03 cm
+
+  textParas.push(
+    // Вставляем плавающую линию перед текстом маршрута
+    createVmlRectangle(11.53, 0.15, '#36c6f5', 0.2, lineLeftOffsetCm, 1)
+  );
+
   textParas.push(new Paragraph({
     alignment: AlignmentType.RIGHT,
-    spacing: { before: 0, after: 40 },
-    border: {
-      bottom: {
-        style: BorderStyle.SINGLE,
-        size: 12,         // 12 eighths-of-pt ≈ 1.5pt ≈ 0.05cm — используем толстую линию
-        color: C_CYAN,    // #36c6f5
-        space: 1,
-      }
-    },
-    children: [new TextRun({ text: '', size: 4 })]   // пустой, только линия
+    spacing: { before: 120, after: 120 },
+    children: [
+      new TextRun({
+        text: cleanRoute,
+        bold: true,
+        size: 36,
+        font: 'Cambria',
+        color: '800000',
+      })
+    ]
   }));
 
   // Маршрут: 18pt жирный, #800000, RIGHT
@@ -559,20 +570,17 @@ async function buildDocument(inputJsonPath, outputDocxPath) {
         page: {
           size: { width: PAGE_W, height: PAGE_H },
           margin: {
-            top: MARGIN,
-            bottom: 1800,   // ~3.2cm место под футер
+            top: 2500,    // Смещаем ОСНОВНОЙ текст вниз (из-за плавающего хедера)
+            bottom: 2000, // Смещаем ОСНОВНОЙ текст вверх (из-за плавающего футера)
             left: MARGIN,
             right: MARGIN,
-            header: 0,
-            footer: 300,
+            header: 0,    // КРИТИЧНО: прибиваем хедер к нулю
+            footer: 0,    // КРИТИЧНО: прибиваем футер к нулю
           }
         }
-      },
-      headers: { default: createHeader(t, logoPath, daysNights) },
-      footers: { default: createFooter(t) },
-      children: docChildren,
+      }
     }]
-  });
+  })
 
   const buffer = await Packer.toBuffer(doc);
   fs.writeFileSync(outputDocxPath, buffer);
