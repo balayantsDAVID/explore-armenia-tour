@@ -1,23 +1,10 @@
 // ============================================================
-// ExploreArmenia — DOCX Builder v6 (STABLE)
+// ExploreArmenia — DOCX Builder v6.1 (ИСПРАВЛЕННЫЙ)
 // ============================================================
-// ИСПРАВЛЕНО: логотип через ImageRun floating (НЕ VML base64).
-// VML base64 внутри <w:pict> ломал DOCX структуру в Word.
-//
-// HEADER — слои (снизу вверх):
-//   VML rect  #deebf7  21.06×3.48 cm  top=0    left=0      z=-4  фон
-//   VML rect  #36c6f5  17.21×3.48 cm  top=0    left=3.85   z=-3  синяя полоса
-//   VML oval  #FFFFFF   3.35×3.35 cm  top=0.065 left=0.25  z=-2  белый круг
-//   ImageRun  logo.png  3.35×3.35 cm  floating anchor       z=10  логотип
-//   Paragraph (inline)  26pt белый, indent left=3.85cm       —    заголовок
-//
-// FOOTER — слои:
-//   VML rect  #deebf7  21.06×2.49 cm  top=0    left=0      z=-1  фон
-//   Paragraph (inline)  18pt #c10000  слоган
-//   Paragraph (inline)  10pt #800000  контакты
-//
-// РАЗДЕЛИТЕЛЬ ДНЯ:
-//   VML rect (inline, без page-relative) #36c6f5  11.53×0.15 cm
+// ИСПРАВЛЕНО:
+// 1. Добавлен обязательный параметр relative: 'page' в ImageRun floating.
+// 2. Удалены дублирующиеся xmlns:w и xmlns:v из ImportedXmlComponent,
+//    которые приводили к ошибке повреждения структуры в MS Word.
 // ============================================================
 
 'use strict';
@@ -96,7 +83,7 @@ const DICT = {
 };
 
 // ═══════════════════════════════════════════════════════════
-// VML ФИГУРЫ (только rect и oval — БЕЗ base64)
+// VML ФИГУРЫ (исправлено наследование неймспейсов)
 // ═══════════════════════════════════════════════════════════
 
 /** VML прямоугольник с абсолютной позицией от края страницы */
@@ -110,10 +97,9 @@ function vmlRect(wCm, hCm, color, topCm, leftCm, zIndex) {
     'mso-position-vertical-relative:page',
   ].join(';');
   return new ImportedXmlComponent(
-    '<w:p xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"' +
-    ' xmlns:v="urn:schemas-microsoft-com:vml">' +
+    '<w:p>' +
     '<w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr>' +
-    '<w:r><w:rPr/><w:pict>' +
+    '<w:r><w:pict>' +
     `<v:rect style="${style}" fillcolor="#${color}" stroked="f">` +
     '<v:fill type="solid"/></v:rect>' +
     '</w:pict></w:r></w:p>'
@@ -131,10 +117,9 @@ function vmlCircle(dCm, color, topCm, leftCm, zIndex) {
     'mso-position-vertical-relative:page',
   ].join(';');
   return new ImportedXmlComponent(
-    '<w:p xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"' +
-    ' xmlns:v="urn:schemas-microsoft-com:vml">' +
+    '<w:p>' +
     '<w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr>' +
-    '<w:r><w:rPr/><w:pict>' +
+    '<w:r><w:pict>' +
     `<v:oval style="${style}" fillcolor="#${color}" stroked="f">` +
     '<v:fill type="solid"/></v:oval>' +
     '</w:pict></w:r></w:p>'
@@ -144,13 +129,12 @@ function vmlCircle(dCm, color, topCm, leftCm, zIndex) {
 /** VML inline прямоугольник — позиция относительно текста (для разделителя дня) */
 function vmlRectInline(wCm, hCm, color) {
   return new ImportedXmlComponent(
-    '<w:p xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"' +
-    ' xmlns:v="urn:schemas-microsoft-com:vml">' +
+    '<w:p>' +
     '<w:pPr>' +
     '  <w:jc w:val="right"/>' +
     '  <w:spacing w:before="0" w:after="60"/>' +
     '</w:pPr>' +
-    '<w:r><w:rPr/><w:pict>' +
+    '<w:r><w:pict>' +
     `<v:rect style="width:${wCm}cm;height:${hCm}cm" fillcolor="#${color}" stroked="f">` +
     '<v:fill type="solid"/></v:rect>' +
     '</w:pict></w:r></w:p>'
@@ -178,12 +162,12 @@ function daysNightsStr(days, lang) {
 function createHeader(t, logoPath, daysNights) {
   const children = [];
 
-  // Фигуры (VML, только цвет — без base64)
-  children.push(vmlRect(21.06, 3.48, C_LIGHTBLUE, 0, 0, -4));        // фон
-  children.push(vmlRect(17.21, 3.48, C_CYAN, 0, 3.85, -3));     // синяя полоса
-  children.push(vmlCircle(3.35, C_WHITE, 0.065, 0.25, -2));          // белый круг
+  // Фигуры (VML, только цвет)
+  children.push(vmlRect(21.06, 3.48, C_LIGHTBLUE, 0, 0, -4));   // фон
+  children.push(vmlRect(17.21, 3.48, C_CYAN, 0, 3.85, -3));        // синяя полоса
+  children.push(vmlCircle(3.35, C_WHITE, 0.065, 0.25, -2));     // белый круг
 
-  // Логотип через ImageRun floating (НЕ VML base64 — это было причиной краша)
+  // Логотип через исправленный ImageRun floating
   if (fs.existsSync(logoPath)) {
     const logoData = fs.readFileSync(logoPath);
     children.push(new Paragraph({
@@ -194,9 +178,14 @@ function createHeader(t, logoPath, daysNights) {
           data: logoData,
           transformation: { width: 95, height: 95 },   // 3.35 cm = 95 pt
           floating: {
-            // 1 cm = 360000 EMU
-            horizontalPosition: { offset: 90000 },    // 0.25 cm от левого края
-            verticalPosition: { offset: 23400 },    // 0.065 cm от верха
+            horizontalPosition: {
+              relative: 'page', // ИСПРАВЛЕНО: Обязательный параметр для схемы
+              offset: 90000,    // 0.25 cm от левого края
+            },
+            verticalPosition: {
+              relative: 'page', // ИСПРАВЛЕНО: Обязательный параметр для схемы
+              offset: 23400,    // 0.065 cm от верха
+            },
             wrap: { type: 'none' },
             allowOverlap: true,
             lockAnchor: false,
@@ -209,7 +198,6 @@ function createHeader(t, logoPath, daysNights) {
   }
 
   // Текст поверх фигур
-  // Отступ слева = 3.85 cm ≈ 2183 DXA (ширина зоны логотипа)
   children.push(new Paragraph({
     alignment: AlignmentType.CENTER,
     spacing: { before: 180, after: 40 },
@@ -319,7 +307,7 @@ async function buildDayBlock(day, dayIdx, t, tempDir) {
   // ── Правая колонка ──────────────────────────────────────
   const textParas = [];
 
-  // Заголовок: 18pt #800000 RIGHT
+  // Заголовок
   textParas.push(new Paragraph({
     alignment: AlignmentType.RIGHT,
     spacing: { before: 160, after: 60 },
@@ -331,10 +319,10 @@ async function buildDayBlock(day, dayIdx, t, tempDir) {
     ]
   }));
 
-  // Синяя линия-разделитель: VML rect inline 11.53 × 0.15 cm
+  // Разделитель дня
   textParas.push(vmlRectInline(11.53, 0.15, C_CYAN));
 
-  // Маршрут: 18pt жирный #800000 RIGHT
+  // Маршрут
   textParas.push(new Paragraph({
     alignment: AlignmentType.RIGHT,
     spacing: { before: 60, after: 140 },
@@ -346,7 +334,7 @@ async function buildDayBlock(day, dayIdx, t, tempDir) {
     ]
   }));
 
-  // Буллиты: первое слово жирное, 12pt justified
+  // Буллиты
   for (const place of places) {
     const text = (place.final_text || '').trim();
     if (!text) continue;
@@ -461,8 +449,8 @@ async function buildDocument(inputJsonPath, outputDocxPath) {
             bottom: 1700,   // 2.49 cm footer + gap
             left: MARGIN,
             right: MARGIN,
-            header: 0,      // прибить к краю
-            footer: 0,      // прибить к краю
+            header: 0,
+            footer: 0,
           }
         }
       },
